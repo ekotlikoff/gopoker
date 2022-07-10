@@ -97,7 +97,7 @@ func NewTable() *Table {
 	return table
 }
 
-// NewTable create a new table with custom config
+// NewTableWithConfig create a new table with custom config
 func NewTableWithConfig(tableConfig TableConfig) *Table {
 	table := Table{TableConfig: tableConfig, tableMutex: sync.RWMutex{}}
 	return &table
@@ -266,6 +266,6 @@ func (table *Table) getIndexFromPlayer(player *Player) (int, error) {
 }
 
 // GetTable get the player's table
-func (p *Player) GetTable() *Table {
-	return p.table
+func (player *Player) GetTable() *Table {
+	return player.table
 }

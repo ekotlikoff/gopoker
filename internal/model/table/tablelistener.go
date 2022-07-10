@@ -57,7 +57,7 @@ func (hand *Hand) ListenForPlayerActions() {
 			ctx, cancel := context.WithTimeout(context.Background(), timeRemaining)
 			defer cancel()
 			t := time.Now()
-			err := hand.PlayerAction(player, getPlayerAction(player, ctx))
+			err := hand.PlayerAction(player, getPlayerAction(ctx, player))
 			timeRemaining -= time.Since(t)
 			if err == nil {
 				success = true
@@ -72,7 +72,7 @@ func (hand *Hand) ListenForPlayerActions() {
 	hand.RoundDone = true
 }
 
-func getPlayerAction(player *Player, ctx context.Context) RoundAction {
+func getPlayerAction(ctx context.Context, player *Player) RoundAction {
 	log.Println("Waiting for action from", player.Name)
 	action := RoundAction{actionType: Fold}
 	select {
