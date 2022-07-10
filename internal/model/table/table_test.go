@@ -87,8 +87,8 @@ func TestPlayAllIn(t *testing.T) {
 	}()
 	table.Players[0].StandUp()
 	table.Players[2].StandUp()
-	table.Players[2].ActionChan <- Action{Raise, 400}
-	table.Players[0].ActionChan <- Action{Call, 400}
+	table.Players[2].ActionChan <- RoundAction{Raise, 400}
+	table.Players[0].ActionChan <- RoundAction{Call, 400}
 	retries := 0
 	for table.playing && retries < 5 {
 		time.Sleep(time.Millisecond)
@@ -119,7 +119,7 @@ func TestPlayFoldWin(t *testing.T) {
 	}()
 	table.Players[0].StandUp()
 	table.Players[2].StandUp()
-	table.Players[2].ActionChan <- Action{Fold, 0}
+	table.Players[2].ActionChan <- RoundAction{Fold, 0}
 	fmt.Println(table)
 	retries := 0
 	for table.playing && retries < 5 {
@@ -148,10 +148,10 @@ func TestPlayFoldWithRematch(t *testing.T) {
 		err := table.Play()
 		fmt.Println(err)
 	}()
-	table.Players[2].ActionChan <- Action{Fold, 0}
+	table.Players[2].ActionChan <- RoundAction{Fold, 0}
 	table.Players[0].StandUp()
 	table.Players[2].StandUp()
-	table.Players[0].ActionChan <- Action{Fold, 0}
+	table.Players[0].ActionChan <- RoundAction{Fold, 0}
 	fmt.Println(table)
 	totalFunds := paul.Funds + leto.Funds
 	retries := 0
@@ -180,14 +180,14 @@ func TestPlaySimple(t *testing.T) {
 		err := table.Play()
 		fmt.Println(err)
 	}()
-	table.Players[2].ActionChan <- Action{Call, 200}
-	table.Players[0].ActionChan <- Action{Call, 200}
-	table.Players[2].ActionChan <- Action{Call, 0}
-	table.Players[0].ActionChan <- Action{Call, 0}
-	table.Players[2].ActionChan <- Action{Call, 0}
-	table.Players[0].ActionChan <- Action{Call, 0}
-	table.Players[2].ActionChan <- Action{Call, 0}
-	table.Players[0].ActionChan <- Action{Call, 0}
+	table.Players[2].ActionChan <- RoundAction{Call, 200}
+	table.Players[0].ActionChan <- RoundAction{Call, 200}
+	table.Players[2].ActionChan <- RoundAction{Call, 0}
+	table.Players[0].ActionChan <- RoundAction{Call, 0}
+	table.Players[2].ActionChan <- RoundAction{Call, 0}
+	table.Players[0].ActionChan <- RoundAction{Call, 0}
+	table.Players[2].ActionChan <- RoundAction{Call, 0}
+	table.Players[0].ActionChan <- RoundAction{Call, 0}
 	table.Players[0].StandUp()
 	table.Players[2].StandUp()
 	fmt.Println(table)
@@ -218,16 +218,16 @@ func TestPlayNoPlayerAtSeatZero(t *testing.T) {
 		err := table.Play()
 		fmt.Println(err)
 	}()
-	table.Players[2].ActionChan <- Action{Call, 200}
-	table.Players[1].ActionChan <- Action{Call, 200}
-	table.Players[2].ActionChan <- Action{Call, 0}
-	table.Players[1].ActionChan <- Action{Call, 0}
-	table.Players[2].ActionChan <- Action{Call, 0}
-	table.Players[1].ActionChan <- Action{Call, 0}
+	table.Players[2].ActionChan <- RoundAction{Call, 200}
+	table.Players[1].ActionChan <- RoundAction{Call, 200}
+	table.Players[2].ActionChan <- RoundAction{Call, 0}
+	table.Players[1].ActionChan <- RoundAction{Call, 0}
+	table.Players[2].ActionChan <- RoundAction{Call, 0}
+	table.Players[1].ActionChan <- RoundAction{Call, 0}
 	table.Players[1].StandUp()
 	table.Players[2].StandUp()
-	table.Players[2].ActionChan <- Action{Call, 0}
-	table.Players[1].ActionChan <- Action{Call, 0}
+	table.Players[2].ActionChan <- RoundAction{Call, 0}
+	table.Players[1].ActionChan <- RoundAction{Call, 0}
 	fmt.Println(table)
 	retries := 0
 	for table.playing && retries < 5 {
@@ -260,26 +260,26 @@ func TestPlayFirstToBetChanges(t *testing.T) {
 		err := table.Play()
 		fmt.Println(err)
 	}()
-	beth.ActionChan <- Action{Call, 200}
-	leto.ActionChan <- Action{Call, 200}
-	paul.ActionChan <- Action{Call, 200}
-	frank.ActionChan <- Action{Call, 200}
-	paul.ActionChan <- Action{Call, 200}
-	frank.ActionChan <- Action{Call, 200}
-	beth.ActionChan <- Action{Call, 200}
-	leto.ActionChan <- Action{Call, 200}
-	paul.ActionChan <- Action{Call, 0}
-	frank.ActionChan <- Action{Raise, 200}
-	beth.ActionChan <- Action{Call, 200}
-	leto.ActionChan <- Action{Call, 200}
-	paul.ActionChan <- Action{Fold, 0}
+	beth.ActionChan <- RoundAction{Call, 200}
+	leto.ActionChan <- RoundAction{Call, 200}
+	paul.ActionChan <- RoundAction{Call, 200}
+	frank.ActionChan <- RoundAction{Call, 200}
+	paul.ActionChan <- RoundAction{Call, 200}
+	frank.ActionChan <- RoundAction{Call, 200}
+	beth.ActionChan <- RoundAction{Call, 200}
+	leto.ActionChan <- RoundAction{Call, 200}
+	paul.ActionChan <- RoundAction{Call, 0}
+	frank.ActionChan <- RoundAction{Raise, 200}
+	beth.ActionChan <- RoundAction{Call, 200}
+	leto.ActionChan <- RoundAction{Call, 200}
+	paul.ActionChan <- RoundAction{Fold, 0}
 	paul.StandUp()
 	frank.StandUp()
 	beth.StandUp()
 	leto.StandUp()
-	frank.ActionChan <- Action{Call, 0}
-	beth.ActionChan <- Action{Call, 0}
-	leto.ActionChan <- Action{Call, 0}
+	frank.ActionChan <- RoundAction{Call, 0}
+	beth.ActionChan <- RoundAction{Call, 0}
+	leto.ActionChan <- RoundAction{Call, 0}
 	fmt.Println(table)
 	retries := 0
 	for table.playing && retries < 5 {

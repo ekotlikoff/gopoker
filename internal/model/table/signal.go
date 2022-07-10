@@ -8,7 +8,7 @@ type (
 	Signal struct {
 		PlayerName string
 		SignalType SignalType
-		Action     Action
+		Action     RoundAction
 		Amount     int
 		Message    string
 	}

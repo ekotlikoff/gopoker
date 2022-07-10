@@ -17,6 +17,7 @@ import (
 )
 
 type (
+	// Player a player's state at a Table
 	Player struct {
 		Name          string
 		Standing      bool
@@ -27,16 +28,18 @@ type (
 		Funds         int
 		BetAmount     int
 		HandRank      int32
-		ActionChan    chan Action
+		ActionChan    chan RoundAction
 		SignalChan    chan Signal
 		table         *Table
 	}
 
+	// PlayerBet a bet that is made in a round
 	PlayerBet struct {
 		Player *Player
 		Bet    int
 	}
 
+	// Table the group of players playing hands or standing and watching
 	Table struct {
 		TableConfig TableConfig
 		Players     [MAX_TABLE_SIZE]*Player
@@ -47,32 +50,43 @@ type (
 		tableMutex  sync.RWMutex
 	}
 
+	// TableConfig define the behavior of the game played at a Table
 	TableConfig struct {
 		minBet              int
 		timeToBet           time.Duration
 		secondsBetweenHands time.Duration
 	}
 
+	// ActionType an action a player can take during their turn in a round
 	ActionType int
 
-	Action struct {
+	// RoundAction how a player (another goroutine) can interact with the table during their turn in a round
+	RoundAction struct {
 		actionType ActionType
 		bet        int
 	}
 )
 
 const (
-	DEFAULT_MIN_BET               = 200
-	DEFAULT_SECONDS_BETWEEN_HANDS = 4
-	MIN_PLAYERS_TO_PLAY           = 2
-	MAX_TABLE_SIZE                = 10
-	MAX_STANDERS_SIZE             = 10
-	AllIn                         = ActionType(iota)
-	Raise                         = ActionType(iota)
-	Call                          = ActionType(iota)
-	Fold                          = ActionType(iota)
+	// DEFAULT_MIN_BET default minimum bet controlling big blinds
+	DEFAULT_MIN_BET = 200
+	// MIN_PLAYERS_TO_PLAY below which the hand cannot start
+	MIN_PLAYERS_TO_PLAY = 2
+	// MAX_TABLE_SIZE once reached no more players can sit
+	MAX_TABLE_SIZE = 10
+	// MAX_STANDERS_SIZE once reached no more players can stand TODO what happens when standers is full and someone stands up?
+	MAX_STANDERS_SIZE = 10
+	// AllIn takes the player all in
+	AllIn = ActionType(iota)
+	// Raise the current bet
+	Raise = ActionType(iota)
+	// Call the current bet
+	Call = ActionType(iota)
+	// Fold your hand
+	Fold = ActionType(iota)
 )
 
+// NewTable create a new table
 func NewTable() *Table {
 	table := NewTableWithConfig(
 		TableConfig{
@@ -83,19 +97,22 @@ func NewTable() *Table {
 	return table
 }
 
+// NewTable create a new table with custom config
 func NewTableWithConfig(tableConfig TableConfig) *Table {
 	table := Table{TableConfig: tableConfig, tableMutex: sync.RWMutex{}}
 	return &table
 }
 
+// NewPlayer create a new player
 func NewPlayer(name string) *Player {
 	return NewPlayerWithFunds(name, 0)
 }
 
+// NewPlayerWithFunds create a new player with funds
 func NewPlayerWithFunds(name string, funds int) *Player {
 	player := Player{
 		Name: name, Funds: funds,
-		ActionChan: make(chan Action), SignalChan: make(chan Signal),
+		ActionChan: make(chan RoundAction), SignalChan: make(chan Signal),
 	}
 	return &player
 }
@@ -137,7 +154,7 @@ func (table *Table) playersForHand() (*ring.Ring, Pot) {
 	return out.Prev(), Pot{MainPot: mainPot, SidePots: []SubPot{}}
 }
 
-func (table *Table) IncrementDealerIndex() error {
+func (table *Table) incrementDealerIndex() error {
 	for i := 1; i < len(table.Players); i++ {
 		dealerIndex := (i + table.DealerIndex) % len(table.Players)
 		log.Println("index", dealerIndex)
@@ -151,6 +168,7 @@ func (table *Table) IncrementDealerIndex() error {
 	return errors.New("incrementdealerindex: could not find next dealer")
 }
 
+// SitDown sit down the player at the table and seat TODO this should probably be an async action
 func (table *Table) SitDown(player *Player, seat int) error {
 	table.tableMutex.Lock()
 	defer table.tableMutex.Unlock()
@@ -167,6 +185,7 @@ func (table *Table) SitDown(player *Player, seat int) error {
 	}
 }
 
+// StandUp - TODO this should likely be moved to async actions
 func (player *Player) StandUp() {
 	player.WantToStandUp = true
 }
@@ -184,6 +203,7 @@ func (table *Table) standUp(player *Player) error {
 	return errors.New("Player is not sitting at this table")
 }
 
+// String player's string
 func (player Player) String() string {
 	cards := ""
 	betAmount := ""
@@ -201,6 +221,7 @@ func (player Player) String() string {
 	return player.Name + ", Funds: " + fmt.Sprint(player.Funds) + betAmount + cards
 }
 
+// String table's string
 func (table *Table) String() string {
 	table.tableMutex.RLock()
 	defer table.tableMutex.RUnlock()
@@ -244,6 +265,7 @@ func (table *Table) getIndexFromPlayer(player *Player) (int, error) {
 		" is not playing at this table")
 }
 
+// GetTable get the player's table
 func (p *Player) GetTable() *Table {
 	return p.table
 }

@@ -30,7 +30,7 @@ type (
 
 func (table *Table) NewHand() *Hand {
 	if table.Players[table.DealerIndex] == nil {
-		table.IncrementDealerIndex()
+		table.incrementDealerIndex()
 	}
 	players, pot := table.playersForHand()
 	return &Hand{
@@ -148,7 +148,7 @@ func (hand *Hand) playerBet(player *Player, bet int) error {
 }
 
 func (hand *Hand) PlayerAction(
-	player *Player, action Action) error {
+	player *Player, action RoundAction) error {
 	if pRing(hand.BetTurn) != player || hand.RoundDone {
 		return errors.New("it's not your turn to bet")
 	}

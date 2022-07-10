@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// Play rounds at the table
 func (table *Table) Play() error {
 	if table.playing {
 		return errors.New("play: table already playing")
@@ -38,7 +39,7 @@ func (table *Table) Play() error {
 				table.standUp(p)
 			}
 		}
-		if err := table.IncrementDealerIndex(); err != nil {
+		if err := table.incrementDealerIndex(); err != nil {
 			log.Println(err)
 			table.playing = false
 			return err
@@ -46,6 +47,7 @@ func (table *Table) Play() error {
 	}
 }
 
+// ListenForPlayerActions get each player's action for the round of bets
 func (hand *Hand) ListenForPlayerActions() {
 	for !hand.RoundDone && !hand.BettingDone && !hand.HandDone {
 		success := false
@@ -70,9 +72,9 @@ func (hand *Hand) ListenForPlayerActions() {
 	hand.RoundDone = true
 }
 
-func getPlayerAction(player *Player, ctx context.Context) Action {
+func getPlayerAction(player *Player, ctx context.Context) RoundAction {
 	log.Println("Waiting for action from", player.Name)
-	action := Action{actionType: Fold}
+	action := RoundAction{actionType: Fold}
 	select {
 	case action = <-player.ActionChan:
 	case <-ctx.Done():
