@@ -50,7 +50,7 @@ type (
 		tableMutex  sync.RWMutex
 	}
 
-	// TableConfig define the behavior of the game played at a Table
+	// TableConfig define nuances of the game played at a Table
 	TableConfig struct {
 		minBet              int
 		timeToBet           time.Duration
@@ -245,7 +245,7 @@ func (table *Table) String() string {
 		if p == pRing(table.Hand.BetTurn) {
 			out += " (B) "
 		}
-		if p == table.Hand.Head() {
+		if p == table.Hand.Dealer() {
 			out += " (D) "
 		}
 		out += "\n"

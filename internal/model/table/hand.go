@@ -10,15 +10,24 @@ import (
 )
 
 type (
+	// Hand can be played and winners will be identified
 	Hand struct {
-		Deck        poker.Deck
-		Board       []poker.Card
+		// Deck of cards
+		Deck poker.Deck
+		// Board shared cards
+		Board []poker.Card
+		// TableConfig defines nuances of play
 		TableConfig TableConfig
-		Players     *ring.Ring
-		Pot         Pot
-		FirstToBet  *ring.Ring
-		BetTurn     *ring.Ring
-		CurrentBet  int
+		// Players in the hand
+		Players *ring.Ring
+		// Pot of winnings
+		Pot Pot
+		// FirstToBet bets first
+		FirstToBet *ring.Ring
+		// BetTurn is betting next
+		BetTurn *ring.Ring
+		// CurrentBet is the amount to call
+		CurrentBet int
 		// If the round of betting is done
 		RoundDone bool
 		// If dealing is still needed but no more betting
@@ -28,6 +37,7 @@ type (
 	}
 )
 
+// NewHand create a hand
 func (table *Table) NewHand() *Hand {
 	if table.Players[table.DealerIndex] == nil {
 		table.incrementDealerIndex()
@@ -57,6 +67,7 @@ func (hand *Hand) validateBlinds() error {
 	return nil
 }
 
+// StartHand start a hand
 func (hand *Hand) StartHand() error {
 	if hand.Players.Len() < MIN_PLAYERS_TO_PLAY {
 		return errors.New("starthand: insufficient players to start hand")
@@ -76,14 +87,17 @@ func (hand *Hand) StartHand() error {
 	return nil
 }
 
-func (hand *Hand) Head() *Player {
+// Dealer is the dealer of the hand
+func (hand *Hand) Dealer() *Player {
 	return pRing(hand.Players)
 }
 
+// SmallBlind is the small blind of the hand
 func (hand *Hand) SmallBlind() *Player {
 	return pRing(hand.Players.Next())
 }
 
+// BigBlind is the big blind of the hand
 func (hand *Hand) BigBlind() *Player {
 	return pRing(hand.Players.Next().Next())
 }
@@ -147,6 +161,7 @@ func (hand *Hand) playerBet(player *Player, bet int) error {
 	return nil
 }
 
+// PlayerAction handles a player action
 func (hand *Hand) PlayerAction(
 	player *Player, action RoundAction) error {
 	if pRing(hand.BetTurn) != player || hand.RoundDone {
@@ -217,6 +232,7 @@ func (hand *Hand) playerFold() {
 	hand.BetTurn.Unlink(1)
 }
 
+// BeterCount determines the number of betters
 func (hand *Hand) BetterCount() int {
 	betters := 0
 	better := hand.BetTurn
@@ -230,6 +246,7 @@ func (hand *Hand) BetterCount() int {
 	return betters
 }
 
+// Deal adds shared cards on the board
 func (hand *Hand) Deal() error {
 	if !hand.RoundDone {
 		return errors.New("deal: currently betting")
@@ -250,6 +267,7 @@ func (hand *Hand) dealHole(player *Player) {
 	player.Hole = hand.Deck.Draw(2)
 }
 
+// String the hand's string
 func (hand *Hand) String() string {
 	out := ""
 	if hand.RoundDone {
@@ -274,7 +292,7 @@ func (hand *Hand) String() string {
 		if p == pRing(hand.BetTurn) {
 			out += " (B) "
 		}
-		if p == hand.Head() {
+		if p == hand.Dealer() {
 			out += " (D) "
 		}
 		out += "\n"
