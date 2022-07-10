@@ -74,7 +74,7 @@ func TestStartHandAllInSmallBlind(t *testing.T) {
 
 func TestPlayAllIn(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DEFAULT_MIN_BET, timeToBet: time.Second * 30,
+		minBet: DefaultMinBet, timeToBet: time.Second * 30,
 		secondsBetweenHands: time.Second * 0,
 	})
 	leto := NewPlayerWithFunds("Leto", 400)
@@ -106,7 +106,7 @@ func TestPlayAllIn(t *testing.T) {
 
 func TestPlayFoldWin(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DEFAULT_MIN_BET, timeToBet: time.Second * 30,
+		minBet: DefaultMinBet, timeToBet: time.Second * 30,
 		secondsBetweenHands: time.Second * 0,
 	})
 	leto := NewPlayerWithFunds("Leto", 400)
@@ -137,7 +137,7 @@ func TestPlayFoldWin(t *testing.T) {
 
 func TestPlayFoldWithRematch(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DEFAULT_MIN_BET, timeToBet: time.Second * 30,
+		minBet: DefaultMinBet, timeToBet: time.Second * 30,
 		secondsBetweenHands: time.Second * 0,
 	})
 	leto := NewPlayerWithFunds("Leto", 400)
@@ -169,7 +169,7 @@ func TestPlayFoldWithRematch(t *testing.T) {
 
 func TestPlaySimple(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DEFAULT_MIN_BET, timeToBet: time.Second * 30,
+		minBet: DefaultMinBet, timeToBet: time.Second * 30,
 		secondsBetweenHands: time.Second * 0,
 	})
 	leto := NewPlayerWithFunds("Leto", 400)
@@ -207,7 +207,7 @@ func TestPlaySimple(t *testing.T) {
 
 func TestPlayNoPlayerAtSeatZero(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DEFAULT_MIN_BET, timeToBet: time.Second * 30,
+		minBet: DefaultMinBet, timeToBet: time.Second * 30,
 		secondsBetweenHands: time.Second * 0,
 	})
 	leto := NewPlayerWithFunds("Leto", 400)
@@ -245,7 +245,7 @@ func TestPlayNoPlayerAtSeatZero(t *testing.T) {
 
 func TestPlayFirstToBetChanges(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DEFAULT_MIN_BET, timeToBet: time.Second * 30,
+		minBet: DefaultMinBet, timeToBet: time.Second * 30,
 		secondsBetweenHands: time.Second * 0,
 	})
 	leto := NewPlayerWithFunds("Leto", 800)
@@ -297,7 +297,7 @@ func TestPlayFirstToBetChanges(t *testing.T) {
 
 func TestTimeoutIsFold(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DEFAULT_MIN_BET, timeToBet: time.Millisecond * 2,
+		minBet: DefaultMinBet, timeToBet: time.Millisecond * 2,
 		secondsBetweenHands: time.Second * 0,
 	})
 	leto := NewPlayerWithFunds("Leto", 800)

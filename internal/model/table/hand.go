@@ -69,7 +69,7 @@ func (hand *Hand) validateBlinds() error {
 
 // StartHand start a hand
 func (hand *Hand) StartHand() error {
-	if hand.Players.Len() < MIN_PLAYERS_TO_PLAY {
+	if hand.Players.Len() < MinPlayersToPlay {
 		return errors.New("starthand: insufficient players to start hand")
 	}
 	if err := hand.validateBlinds(); err != nil {
@@ -232,14 +232,14 @@ func (hand *Hand) playerFold() {
 	hand.BetTurn.Unlink(1)
 }
 
-// BeterCount determines the number of betters
+// BetterCount determines the number of betters
 func (hand *Hand) BetterCount() int {
 	betters := 0
 	better := hand.BetTurn
 	for i := 0; i < better.Len(); i++ {
 		player := pRing(better)
 		if !player.AllIn {
-			betters += 1
+			betters++
 		}
 		better = better.Next()
 	}

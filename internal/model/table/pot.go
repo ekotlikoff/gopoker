@@ -9,11 +9,13 @@ import (
 )
 
 type (
+	// Pot is the money in the Hand that is yet to be distributed
 	Pot struct {
 		MainPot  SubPot
 		SidePots []SubPot
 	}
 
+	// SubPot is one of potentially multiple pots and identifies the players in the running to win it
 	SubPot struct {
 		Players map[*Player]struct{}
 		Pot     int

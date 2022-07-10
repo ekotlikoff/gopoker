@@ -42,10 +42,10 @@ type (
 	// Table the group of players playing hands or standing and watching
 	Table struct {
 		TableConfig TableConfig
-		Players     [MAX_TABLE_SIZE]*Player
+		Players     [MaxTableSize]*Player
 		DealerIndex int
 		playing     bool
-		Standers    [MAX_STANDERS_SIZE]*Player
+		Standers    [MaxStandersSize]*Player
 		Hand        *Hand
 		tableMutex  sync.RWMutex
 	}
@@ -68,14 +68,14 @@ type (
 )
 
 const (
-	// DEFAULT_MIN_BET default minimum bet controlling big blinds
-	DEFAULT_MIN_BET = 200
-	// MIN_PLAYERS_TO_PLAY below which the hand cannot start
-	MIN_PLAYERS_TO_PLAY = 2
-	// MAX_TABLE_SIZE once reached no more players can sit
-	MAX_TABLE_SIZE = 10
-	// MAX_STANDERS_SIZE once reached no more players can stand TODO what happens when standers is full and someone stands up?
-	MAX_STANDERS_SIZE = 10
+	// DefaultMinBet default minimum bet controlling big blinds
+	DefaultMinBet = 200
+	// MinPlayersToPlay below which the hand cannot start
+	MinPlayersToPlay = 2
+	// MaxTableSize once reached no more players can sit
+	MaxTableSize = 10
+	// MaxStandersSize once reached no more players can stand TODO what happens when standers is full and someone stands up?
+	MaxStandersSize = 10
 	// AllIn takes the player all in
 	AllIn = ActionType(iota)
 	// Raise the current bet
@@ -90,7 +90,7 @@ const (
 func NewTable() *Table {
 	table := NewTableWithConfig(
 		TableConfig{
-			minBet: DEFAULT_MIN_BET, timeToBet: time.Second * 30,
+			minBet: DefaultMinBet, timeToBet: time.Second * 30,
 			secondsBetweenHands: time.Second * 5,
 		},
 	)
@@ -174,9 +174,9 @@ func (table *Table) SitDown(player *Player, seat int) error {
 	defer table.tableMutex.Unlock()
 	if player.Funds < table.TableConfig.minBet {
 		return errors.New("Player has insufficient funds to sit")
-	} else if seat >= MAX_TABLE_SIZE {
+	} else if seat >= MaxTableSize {
 		return errors.New("Seat, " + fmt.Sprint(seat) +
-			" is greater than max table size, " + fmt.Sprint(MAX_TABLE_SIZE))
+			" is greater than max table size, " + fmt.Sprint(MaxTableSize))
 	} else if table.Players[seat] == nil {
 		table.Players[seat] = player
 		return nil
