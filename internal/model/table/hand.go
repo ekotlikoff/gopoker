@@ -12,28 +12,34 @@ import (
 type (
 	// Hand can be played and winners will be identified
 	Hand struct {
+		// TableConfig defines nuances of play
+		TableConfig TableConfig
 		// Deck of cards
 		Deck poker.Deck
 		// Board shared cards
 		Board []poker.Card
-		// TableConfig defines nuances of play
-		TableConfig TableConfig
+		// Round is the current round of betting
+		Round *Round
 		// Players in the hand
 		Players *ring.Ring
 		// Pot of winnings
 		Pot Pot
 		// FirstToBet bets first
 		FirstToBet *ring.Ring
+		// If dealing is still needed but no more betting
+		BettingDone bool
+		// If no more dealing is needed for the hand
+		HandDone bool
+	}
+
+	// Round is a cycle of betting, there are 4 in a hand: pre-flop, flop, turn, river
+	Round struct {
 		// BetTurn is betting next
 		BetTurn *ring.Ring
 		// CurrentBet is the amount to call
 		CurrentBet int
 		// If the round of betting is done
 		RoundDone bool
-		// If dealing is still needed but no more betting
-		BettingDone bool
-		// If no more dealing is needed for the hand
-		HandDone bool
 	}
 )
 
@@ -48,7 +54,6 @@ func (table *Table) NewHand() *Hand {
 		TableConfig: table.TableConfig,
 		Players:     players,
 		Pot:         pot,
-		BetTurn:     players,
 	}
 }
 
@@ -115,39 +120,42 @@ func (hand *Hand) takeBlinds() {
 	}
 	if (hand.SmallBlind().AllIn || hand.BigBlind().AllIn) &&
 		hand.Players.Len() == 2 {
-		hand.RoundDone = true
+		hand.Round.RoundDone = true
 		hand.BettingDone = true
 	}
 }
 
 func (hand *Hand) startBets() {
 	hand.FirstToBet = nil
+	hand.Round = &Round{
+		BetTurn: hand.Players,
+	}
 	log.Println("board length", len(hand.Board))
 	if len(hand.Board) == 0 {
-		hand.CurrentBet = hand.TableConfig.minBet
+		hand.Round.CurrentBet = hand.TableConfig.minBet
 		hand.takeBlinds()
-		hand.BetTurn = hand.Players.Next().Next()
+		hand.Round.BetTurn = hand.Players.Next().Next()
 	} else {
-		hand.CurrentBet = 0
-		hand.BetTurn = hand.Players
+		hand.Round.CurrentBet = 0
+		hand.Round.BetTurn = hand.Players
 	}
 	hand.nextBetter()
-	hand.FirstToBet = hand.BetTurn
+	hand.FirstToBet = hand.Round.BetTurn
 }
 
 func (hand *Hand) playerBet(player *Player, bet int) error {
 	allIn := bet == player.Funds+player.BetAmount
-	raise := bet > hand.CurrentBet
+	raise := bet > hand.Round.CurrentBet
 	if bet-player.BetAmount > player.Funds {
 		return errors.New("insufficient funds")
-	} else if bet < hand.CurrentBet && !allIn {
+	} else if bet < hand.Round.CurrentBet && !allIn {
 		return errors.New("insufficient bet")
 	} else if raise {
-		if bet-hand.CurrentBet < hand.TableConfig.minBet {
+		if bet-hand.Round.CurrentBet < hand.TableConfig.minBet {
 			return errors.New("cannot raise less than the big blind")
 		}
-		hand.CurrentBet = bet
-		hand.FirstToBet = hand.BetTurn
+		hand.Round.CurrentBet = bet
+		hand.FirstToBet = hand.Round.BetTurn
 	}
 	if allIn {
 		player.AllIn = true
@@ -164,13 +172,13 @@ func (hand *Hand) playerBet(player *Player, bet int) error {
 // PlayerAction handles a player action
 func (hand *Hand) PlayerAction(
 	player *Player, action RoundAction) error {
-	if pRing(hand.BetTurn) != player || hand.RoundDone {
+	if pRing(hand.Round.BetTurn) != player || hand.Round.RoundDone {
 		return errors.New("it's not your turn to bet")
 	}
 	var err error
 	switch action.actionType {
 	case Call:
-		err = hand.playerBet(player, hand.CurrentBet)
+		err = hand.playerBet(player, hand.Round.CurrentBet)
 	case AllIn:
 		if player.Funds != action.bet-player.BetAmount {
 			return fmt.Errorf("playeraction: this is not an all in, funds=%d bet=%d",
@@ -190,11 +198,11 @@ func (hand *Hand) PlayerAction(
 }
 
 func (hand *Hand) nextBetter() {
-	if hand.RoundDone {
+	if hand.Round.RoundDone {
 		log.Println("Skipping nextbetter because round is done")
 		return
 	}
-	better := hand.BetTurn.Next()
+	better := hand.Round.BetTurn.Next()
 	for i := 0; i < better.Len(); i++ {
 		player := pRing(better)
 		if hand.FirstToBet != nil && player == pRing(hand.FirstToBet) {
@@ -202,16 +210,16 @@ func (hand *Hand) nextBetter() {
 			break
 		} else if !player.AllIn {
 			log.Println("Found better", pRing(better).Name)
-			hand.BetTurn = better
+			hand.Round.BetTurn = better
 			return
 		}
 		better = better.Next()
 	}
-	hand.RoundDone = true
+	hand.Round.RoundDone = true
 }
 
 func (hand *Hand) playerFold() {
-	player := pRing(hand.BetTurn)
+	player := pRing(hand.Round.BetTurn)
 	player.Hole = []poker.Card{}
 	hand.Pot.MainPot.Pot += player.BetAmount
 	player.BetAmount = 0
@@ -225,17 +233,17 @@ func (hand *Hand) playerFold() {
 		hand.BettingDone = true
 		log.Println("Player fold ended betting")
 	}
-	if hand.BetTurn == hand.Players {
+	if hand.Round.BetTurn == hand.Players {
 		hand.Players = hand.Players.Prev()
 	}
-	hand.BetTurn = hand.BetTurn.Prev()
-	hand.BetTurn.Unlink(1)
+	hand.Round.BetTurn = hand.Round.BetTurn.Prev()
+	hand.Round.BetTurn.Unlink(1)
 }
 
 // BetterCount determines the number of betters
 func (hand *Hand) BetterCount() int {
 	betters := 0
-	better := hand.BetTurn
+	better := hand.Round.BetTurn
 	for i := 0; i < better.Len(); i++ {
 		player := pRing(better)
 		if !player.AllIn {
@@ -248,7 +256,7 @@ func (hand *Hand) BetterCount() int {
 
 // Deal adds shared cards on the board
 func (hand *Hand) Deal() error {
-	if !hand.RoundDone {
+	if !hand.Round.RoundDone {
 		return errors.New("deal: currently betting")
 	} else if len(hand.Board) >= 5 {
 		return errors.New("dealing is done")
@@ -258,7 +266,7 @@ func (hand *Hand) Deal() error {
 		cardsToDraw = 1
 	}
 	hand.Board = append(hand.Board, hand.Deck.Draw(cardsToDraw)...)
-	hand.RoundDone = false
+	hand.Round.RoundDone = false
 	hand.startBets()
 	return nil
 }
@@ -270,7 +278,7 @@ func (hand *Hand) dealHole(player *Player) {
 // String the hand's string
 func (hand *Hand) String() string {
 	out := ""
-	if hand.RoundDone {
+	if hand.Round.RoundDone {
 		out += "RoundOver\n"
 	}
 	if len(hand.Board) > 0 {
@@ -289,7 +297,7 @@ func (hand *Hand) String() string {
 	hand.Players.Do(func(v interface{}) {
 		p := v.(*Player)
 		out += fmt.Sprint(p)
-		if p == pRing(hand.BetTurn) {
+		if p == pRing(hand.Round.BetTurn) {
 			out += " (B) "
 		}
 		if p == hand.Dealer() {

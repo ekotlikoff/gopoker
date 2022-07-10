@@ -49,9 +49,9 @@ func (table *Table) Play() error {
 
 // ListenForPlayerActions get each player's action for the round of bets
 func (hand *Hand) ListenForPlayerActions() {
-	for !hand.RoundDone && !hand.BettingDone && !hand.HandDone {
+	for !hand.Round.RoundDone && !hand.BettingDone && !hand.HandDone {
 		success := false
-		player := pRing(hand.BetTurn)
+		player := pRing(hand.Round.BetTurn)
 		timeRemaining := hand.TableConfig.timeToBet
 		for !success {
 			ctx, cancel := context.WithTimeout(context.Background(), timeRemaining)
@@ -69,7 +69,7 @@ func (hand *Hand) ListenForPlayerActions() {
 	}
 	hand.createPots()
 	log.Println("Round of betting is done")
-	hand.RoundDone = true
+	hand.Round.RoundDone = true
 }
 
 func getPlayerAction(ctx context.Context, player *Player) RoundAction {

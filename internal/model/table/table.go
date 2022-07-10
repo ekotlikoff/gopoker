@@ -241,7 +241,7 @@ func (table *Table) String() string {
 	for i, p := range table.Players {
 		seat := "Seat: " + fmt.Sprint(i) + ", " + fmt.Sprint(p)
 		out += seat
-		if p == pRing(table.Hand.BetTurn) {
+		if p == pRing(table.Hand.Round.BetTurn) {
 			out += " (B) "
 		}
 		if p == table.Hand.Dealer() {
