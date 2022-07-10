@@ -1,4 +1,4 @@
-module github.com/Ekotlikoff/gopoker
+module github.com/ekotlikoff/gopoker
 
 go 1.16
 

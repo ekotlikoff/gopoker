@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"time"
 
-	model "github.com/Ekotlikoff/gopoker/internal/model/table"
+	model "github.com/ekotlikoff/gopoker/internal/model/table"
 	"github.com/gofrs/uuid"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"

@@ -10,8 +10,8 @@ import (
 	"syscall/js"
 	"time"
 
-	model "github.com/Ekotlikoff/gopoker/internal/model/table"
-	gateway "github.com/Ekotlikoff/gopoker/internal/server"
+	model "github.com/ekotlikoff/gopoker/internal/model/table"
+	gateway "github.com/ekotlikoff/gopoker/internal/server"
 )
 
 var (

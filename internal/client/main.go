@@ -11,7 +11,7 @@ import (
 	"syscall/js"
 	"time"
 
-	model "github.com/Ekotlikoff/gopoker/internal/model/table"
+	model "github.com/ekotlikoff/gopoker/internal/model/table"
 )
 
 var (
