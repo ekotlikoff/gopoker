@@ -43,12 +43,7 @@ if [[ "$1" = "-install" ]]; then
     popd
 
     if [[ "${TRAVIS}" = "true" ]]; then
-        PROTOBUF_VERSION=3.17.3
-        PROTOC_FILENAME=protoc-${PROTOBUF_VERSION}-linux-x86_64.zip
         pushd /home/travis
-        wget https://github.com/google/protobuf/releases/download/v${PROTOBUF_VERSION}/${PROTOC_FILENAME}
-        unzip ${PROTOC_FILENAME}
-        bin/protoc --version
         popd
     fi
     exit 0
@@ -57,10 +52,6 @@ elif [[ "$#" -ne 0 ]]; then
 fi
 
 misspell -error .
-
-PATH="/home/travis/bin:${PATH}" make proto && \
-    git status --porcelain 2>&1 | fail_on_output || \
-    (git status; git --no-pager diff; exit 1)
 
 # Perform these checks on each module.
 for MOD_FILE in $(find . -name 'go.mod'); do
