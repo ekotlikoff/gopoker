@@ -6,10 +6,6 @@ import (
 	"time"
 )
 
-const (
-	debug = false
-)
-
 func TestNextBetter(t *testing.T) {
 	table := NewTable()
 	table.SitDown(&Player{Name: "Anna", Funds: 200}, 0) // dealer

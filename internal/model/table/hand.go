@@ -113,7 +113,7 @@ func (hand *Hand) takeBlinds() {
 	if hand.BigBlind().Funds == 0 {
 		hand.BigBlind().AllIn = true
 	}
-	if (hand.SmallBlind().AllIn || hand.SmallBlind().AllIn) &&
+	if (hand.SmallBlind().AllIn || hand.BigBlind().AllIn) &&
 		hand.Players.Len() == 2 {
 		hand.RoundDone = true
 		hand.BettingDone = true
@@ -139,12 +139,12 @@ func (hand *Hand) playerBet(player *Player, bet int) error {
 	allIn := bet == player.Funds+player.BetAmount
 	raise := bet > hand.CurrentBet
 	if bet-player.BetAmount > player.Funds {
-		return errors.New("Insufficient funds")
+		return errors.New("insufficient funds")
 	} else if bet < hand.CurrentBet && !allIn {
-		return errors.New("Insufficient bet")
+		return errors.New("insufficient bet")
 	} else if raise {
 		if bet-hand.CurrentBet < hand.TableConfig.minBet {
-			return errors.New("Cannot raise less than the big blind")
+			return errors.New("cannot raise less than the big blind")
 		}
 		hand.CurrentBet = bet
 		hand.FirstToBet = hand.BetTurn
@@ -251,7 +251,7 @@ func (hand *Hand) Deal() error {
 	if !hand.RoundDone {
 		return errors.New("deal: currently betting")
 	} else if len(hand.Board) >= 5 {
-		return errors.New("Dealing is done")
+		return errors.New("dealing is done")
 	}
 	cardsToDraw := 3
 	if len(hand.Board) >= 3 {

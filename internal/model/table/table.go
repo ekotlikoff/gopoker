@@ -129,10 +129,9 @@ func (table *Table) validBBlind(player *Player) bool {
 func (table *Table) playersForHand() (*ring.Ring, Pot) {
 	mainPot := SubPot{make(map[*Player]struct{}), 0}
 	index := (table.DealerIndex + 1) % len(table.Players)
-	player := table.Players[index]
 	var playersPlaying []*Player
 	for i := 0; i < len(table.Players); i++ {
-		player = table.Players[index]
+		player := table.Players[index]
 		if player != nil {
 			if player.Funds <= 0 ||
 				len(playersPlaying) == 0 && !table.validLBlind(player) ||
@@ -251,18 +250,6 @@ func (table *Table) String() string {
 		out += "\n"
 	}
 	return out
-}
-
-func (table *Table) getIndexFromPlayer(player *Player) (int, error) {
-	table.tableMutex.RLock()
-	defer table.tableMutex.RUnlock()
-	for i, p := range table.Players {
-		if p == player {
-			return i, nil
-		}
-	}
-	return 0, errors.New("Given player " + player.Name +
-		" is not playing at this table")
 }
 
 // GetTable get the player's table
