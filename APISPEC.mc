@@ -25,7 +25,7 @@
             - Hand (2 card hand)
             - Turn (bet amount, fold, playerID)
             - ConfigChange (table config, see POST /table/{id})
-    Websocket psuedo code:
+    Websocket pseudo code:
         - Server listener:
             - Sitdown: end sit request to the table's sitdown channel
             - Standup: send standup request to table's standup channel
@@ -53,3 +53,4 @@
                 - if turnChan, handle turn, if success set timeTaken = 0
                 - if timeout, remove(player)
 
+	google.golang.org/protobuf v1.28.0 // indirect
