@@ -153,6 +153,7 @@ func (table *Table) incrementDealerIndex() error {
 	return errors.New("incrementdealerindex: could not find next dealer")
 }
 
+// SitDown seat a player at the table
 func (table *Table) SitDown(player *Player, seat int) error {
 	if player.Funds < table.TableConfig.minBet {
 		return errors.New("Player has insufficient funds to sit")
@@ -167,8 +168,13 @@ func (table *Table) SitDown(player *Player, seat int) error {
 	}
 }
 
+// StandUp a player at the next chance
 func (player *Player) StandUp() {
-	player.WantToStandUp = true
+	if player.Playing {
+		player.WantToStandUp = true
+	} else {
+		player.GetTable().standUp(player)
+	}
 }
 
 func (table *Table) standUp(player *Player) error {

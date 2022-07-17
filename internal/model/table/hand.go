@@ -57,6 +57,7 @@ func (table *Table) NewHand() *Hand {
 	}
 }
 
+// FinishHand ends a hand and handles standing players up
 func (table *Table) FinishHand() error {
 	err := table.Hand.FinishHand()
 	if err != nil {
