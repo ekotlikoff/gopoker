@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"sync"
 	"time"
 
 	// https://jonathanhsiao.com/blog/evaluating-poker-hands-with-bit-math
@@ -14,57 +13,6 @@ import (
 	// each card.  With fancy bit math these representations can very quickly
 	// give the rank of a hand.
 	"github.com/chehsunliu/poker"
-)
-
-type (
-	// Player a player's state at a Table
-	Player struct {
-		Name          string
-		Standing      bool
-		WantToStandUp bool
-		Playing       bool
-		AllIn         bool
-		Hole          []poker.Card
-		Funds         int
-		BetAmount     int
-		HandRank      int32
-		ActionChan    chan RoundAction
-		SignalChan    chan Signal
-		table         *Table
-	}
-
-	// PlayerBet a bet that is made in a round
-	PlayerBet struct {
-		Player *Player
-		Bet    int
-	}
-
-	// Table the group of players playing hands or standing and watching
-	Table struct {
-		TableConfig TableConfig
-		Players     [MaxTableSize]*Player
-		DealerIndex int
-		playing     bool
-		Standers    [MaxStandersSize]*Player
-		Hand        *Hand
-		tableMutex  sync.RWMutex
-	}
-
-	// TableConfig define nuances of the game played at a Table
-	TableConfig struct {
-		minBet              int
-		timeToBet           time.Duration
-		secondsBetweenHands time.Duration
-	}
-
-	// ActionType an action a player can take during their turn in a round
-	ActionType int
-
-	// RoundAction how a player (another goroutine) can interact with the table during their turn in a round
-	RoundAction struct {
-		actionType ActionType
-		bet        int
-	}
 )
 
 const (
@@ -86,6 +34,54 @@ const (
 	Fold = ActionType(iota)
 )
 
+type (
+	// Player a player's state at a Table
+	Player struct {
+		Name          string
+		Standing      bool
+		WantToStandUp bool
+		Playing       bool
+		AllIn         bool
+		Hole          []poker.Card
+		Funds         int
+		BetAmount     int
+		HandRank      int32
+		table         *Table
+	}
+
+	// PlayerBet a bet that is made in a round
+	PlayerBet struct {
+		Player *Player
+		Bet    int
+	}
+
+	// Table the group of players playing hands or standing and watching
+	Table struct {
+		TableConfig TableConfig
+		Players     [MaxTableSize]*Player
+		DealerIndex int
+		playing     bool
+		Standers    [MaxStandersSize]*Player
+		Hand        *Hand
+	}
+
+	// TableConfig define nuances of the game played at a Table
+	TableConfig struct {
+		minBet              int
+		timeToBet           time.Duration
+		secondsBetweenHands time.Duration
+	}
+
+	// ActionType an action a player can take during their turn in a round
+	ActionType int
+
+	// RoundAction how a player (another goroutine) can interact with the table during their turn in a round
+	RoundAction struct {
+		actionType ActionType
+		bet        int
+	}
+)
+
 // NewTable create a new table
 func NewTable() *Table {
 	table := NewTableWithConfig(
@@ -99,7 +95,7 @@ func NewTable() *Table {
 
 // NewTableWithConfig create a new table with custom config
 func NewTableWithConfig(tableConfig TableConfig) *Table {
-	table := Table{TableConfig: tableConfig, tableMutex: sync.RWMutex{}}
+	table := Table{TableConfig: tableConfig}
 	return &table
 }
 
@@ -112,17 +108,8 @@ func NewPlayer(name string) *Player {
 func NewPlayerWithFunds(name string, funds int) *Player {
 	player := Player{
 		Name: name, Funds: funds,
-		ActionChan: make(chan RoundAction), SignalChan: make(chan Signal),
 	}
 	return &player
-}
-
-func (table *Table) validLBlind(player *Player) bool {
-	return player.Funds >= table.TableConfig.minBet/2
-}
-
-func (table *Table) validBBlind(player *Player) bool {
-	return player.Funds >= table.TableConfig.minBet
 }
 
 // Returns ring starting at the dealer
@@ -133,9 +120,7 @@ func (table *Table) playersForHand() (*ring.Ring, Pot) {
 	for i := 0; i < len(table.Players); i++ {
 		player := table.Players[index]
 		if player != nil {
-			if player.Funds <= 0 ||
-				len(playersPlaying) == 0 && !table.validLBlind(player) ||
-				len(playersPlaying) == 1 && !table.validBBlind(player) {
+			if player.Funds <= 0 {
 				player.Standing = true
 				table.Players[index] = nil
 			} else {
@@ -154,12 +139,13 @@ func (table *Table) playersForHand() (*ring.Ring, Pot) {
 }
 
 func (table *Table) incrementDealerIndex() error {
+	log.Printf("dealer index: %d\n", table.DealerIndex)
 	for i := 1; i < len(table.Players); i++ {
 		dealerIndex := (i + table.DealerIndex) % len(table.Players)
 		log.Println("index", dealerIndex)
 		player := table.Players[dealerIndex]
-		if player != nil {
-			log.Println("found player", player.Name)
+		if player != nil && player.Playing && i != table.DealerIndex {
+			log.Printf("found player: %s, index: %d", player.Name, dealerIndex)
 			table.DealerIndex = dealerIndex
 			return nil
 		}
@@ -167,10 +153,7 @@ func (table *Table) incrementDealerIndex() error {
 	return errors.New("incrementdealerindex: could not find next dealer")
 }
 
-// SitDown sit down the player at the table and seat TODO this should probably be an async action
 func (table *Table) SitDown(player *Player, seat int) error {
-	table.tableMutex.Lock()
-	defer table.tableMutex.Unlock()
 	if player.Funds < table.TableConfig.minBet {
 		return errors.New("Player has insufficient funds to sit")
 	} else if seat >= MaxTableSize {
@@ -184,7 +167,6 @@ func (table *Table) SitDown(player *Player, seat int) error {
 	}
 }
 
-// StandUp - TODO this should likely be moved to async actions
 func (player *Player) StandUp() {
 	player.WantToStandUp = true
 }
@@ -217,14 +199,12 @@ func (player Player) String() string {
 	} else {
 		betAmount = ", not playing"
 	}
-	return player.Name + ", Funds: " + fmt.Sprint(player.Funds) + betAmount + cards
+	return fmt.Sprintf("%s, funds: %v%v %s", player.Name, player.Funds, betAmount, cards)
 }
 
 // String table's string
 func (table *Table) String() string {
-	table.tableMutex.RLock()
-	defer table.tableMutex.RUnlock()
-	out := "Table:\n"
+	out := fmt.Sprintf("playing: %v, bettingDone: %v, handDone: %v\n", table.playing, table.Hand.BettingDone, table.Hand.HandDone)
 	if len(table.Hand.Board) > 0 {
 		out += "Board="
 		for _, c := range table.Hand.Board {
@@ -241,7 +221,7 @@ func (table *Table) String() string {
 	for i, p := range table.Players {
 		seat := "Seat: " + fmt.Sprint(i) + ", " + fmt.Sprint(p)
 		out += seat
-		if p == pRing(table.Hand.Round.BetTurn) {
+		if p == RingToPlayer(table.Hand.Round.BetTurn) {
 			out += " (B) "
 		}
 		if p == table.Hand.Dealer() {
@@ -256,3 +236,43 @@ func (table *Table) String() string {
 func (player *Player) GetTable() *Table {
 	return player.table
 }
+
+// // Play rounds at the table
+// func (table *Table) Play() error {
+// 	if table.playing {
+// 		return errors.New("play: table already playing")
+// 	}
+// 	table.playing = true
+// 	for {
+// 		table.Hand = table.NewHand()
+// 		log.Println("Dealing next hand, dealer is", RingToPlayer(table.Hand.Players).Name)
+// 		if err := table.Hand.StartHand(); err != nil {
+// 			table.playing = false
+// 			return err
+// 		}
+// 		table.Hand.ListenForPlayerActions()
+// 		for !table.Hand.HandDone {
+// 			table.Hand.Deal()
+// 			table.Hand.ListenForPlayerActions()
+// 			if len(table.Hand.Board) == 5 {
+// 				table.Hand.HandDone = true
+// 			}
+// 		}
+// 		if err := table.Hand.FinishHand(); err != nil {
+// 			log.Println(err)
+// 			table.playing = false
+// 			return err
+// 		}
+// 		time.Sleep(time.Second * table.TableConfig.secondsBetweenHands)
+// 		for _, p := range table.Players {
+// 			if p != nil && p.WantToStandUp {
+// 				table.standUp(p)
+// 			}
+// 		}
+// 		if err := table.incrementDealerIndex(); err != nil {
+// 			log.Println(err)
+// 			table.playing = false
+// 			return err
+// 		}
+// 	}
+// }

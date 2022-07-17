@@ -1,8 +1,6 @@
 package model
 
 import (
-	"errors"
-	"log"
 	"sort"
 
 	"github.com/chehsunliu/poker"
@@ -23,7 +21,7 @@ type (
 )
 
 func (hand *Hand) createPots() {
-	if hand.CurrentBet == 0 {
+	if hand.Round.CurrentBet == 0 {
 		return
 	}
 	playersAscBet := []*Player{}
@@ -35,18 +33,18 @@ func (hand *Hand) createPots() {
 	sort.Slice(playersAscBet, func(i, j int) bool {
 		return playersAscBet[i].BetAmount < playersAscBet[j].BetAmount
 	})
-	bet := hand.CurrentBet
+	bet := hand.Round.CurrentBet
 	for i, player := range playersAscBet {
 		if player.BetAmount < bet {
 			hand.createSidePot(player, playersAscBet, i)
-			bet = hand.CurrentBet - player.BetAmount
+			bet = hand.Round.CurrentBet - player.BetAmount
 		} else {
 			hand.Pot.MainPot.Pot += player.BetAmount
 			hand.Pot.MainPot.Players[player] = struct{}{}
 		}
 		player.BetAmount = 0
 	}
-	hand.CurrentBet = 0
+	hand.Round.CurrentBet = 0
 }
 
 func (hand *Hand) createSidePot(player *Player, playersAscBet []*Player, i int) {
@@ -63,28 +61,10 @@ func (hand *Hand) createSidePot(player *Player, playersAscBet []*Player, i int) 
 	hand.Pot.MainPot = SubPot{make(map[*Player]struct{}), 0}
 }
 
-// FinishHand is called when all betting is complete and the pot should be
-// distributed.
-func (hand *Hand) FinishHand() error {
-	if !hand.RoundDone || !hand.HandDone {
-		return errors.New("finishhand: table is currently betting")
-	}
-	log.Println("Distributing pots")
-	playerRanking := hand.getPlayerRanking()
-	hand.distributePots(playerRanking)
-	// Clear player holes
-	hand.Players.Do(func(p interface{}) {
-		p.(*Player).Hole = []poker.Card{}
-	})
-	// Clear board
-	hand.Board = []poker.Card{}
-	return nil
-}
-
 func (hand *Hand) getPlayerRanking() [][]*Player {
 	var pRank []*Player
 	if hand.Players.Len() == 1 {
-		return [][]*Player{{pRing(hand.Players)}}
+		return [][]*Player{{RingToPlayer(hand.Players)}}
 	}
 	hand.Players.Do(func(p interface{}) {
 		player := p.(*Player)

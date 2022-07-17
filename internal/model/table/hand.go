@@ -26,7 +26,7 @@ type (
 		Pot Pot
 		// FirstToBet bets first
 		FirstToBet *ring.Ring
-		// If dealing is still needed but no more betting
+		// If dealing is still needed but no more betting, e.g. players are all in
 		BettingDone bool
 		// If no more dealing is needed for the hand
 		HandDone bool
@@ -57,19 +57,25 @@ func (table *Table) NewHand() *Hand {
 	}
 }
 
-func pRing(ring *ring.Ring) *Player {
-	return ring.Value.(*Player)
+func (table *Table) FinishHand() error {
+	err := table.Hand.FinishHand()
+	if err != nil {
+		return err
+	}
+	// Clear player holes and handle standups
+	table.Hand.Players.Do(func(p interface{}) {
+		player := p.(*Player)
+		player.Hole = []poker.Card{}
+		if player.Funds == 0 || player.WantToStandUp {
+			table.standUp(player)
+		}
+	})
+	return table.incrementDealerIndex()
 }
 
-func (hand *Hand) validateBlinds() error {
-	lbValid := hand.SmallBlind().Funds >= hand.TableConfig.minBet/2
-	bbValid := hand.BigBlind().Funds >= hand.TableConfig.minBet
-	if !lbValid || !bbValid {
-		errStr := "failed to validate blinds, lbFunds=%d bbFunds=%d minBet=%d"
-		return fmt.Errorf(errStr, hand.SmallBlind().Funds, hand.BigBlind().Funds,
-			hand.TableConfig.minBet)
-	}
-	return nil
+// RingToPlayer converts from a ring buffer to a player
+func RingToPlayer(ring *ring.Ring) *Player {
+	return ring.Value.(*Player)
 }
 
 // StartHand start a hand
@@ -77,15 +83,12 @@ func (hand *Hand) StartHand() error {
 	if hand.Players.Len() < MinPlayersToPlay {
 		return errors.New("starthand: insufficient players to start hand")
 	}
-	if err := hand.validateBlinds(); err != nil {
-		return fmt.Errorf("starthand: %w", err)
-	}
 	hand.HandDone = false
 	hand.Deck.Shuffle()
 	player := hand.Players
 	for i := 0; i < hand.Players.Len(); i++ {
-		pRing(player).Playing = true
-		hand.dealHole(pRing(player))
+		RingToPlayer(player).Playing = true
+		hand.dealHole(RingToPlayer(player))
 		player = player.Next()
 	}
 	hand.startBets()
@@ -94,17 +97,17 @@ func (hand *Hand) StartHand() error {
 
 // Dealer is the dealer of the hand
 func (hand *Hand) Dealer() *Player {
-	return pRing(hand.Players)
+	return RingToPlayer(hand.Players)
 }
 
 // SmallBlind is the small blind of the hand
 func (hand *Hand) SmallBlind() *Player {
-	return pRing(hand.Players.Next())
+	return RingToPlayer(hand.Players.Next())
 }
 
 // BigBlind is the big blind of the hand
 func (hand *Hand) BigBlind() *Player {
-	return pRing(hand.Players.Next().Next())
+	return RingToPlayer(hand.Players.Next().Next())
 }
 
 func (hand *Hand) takeBlinds() {
@@ -159,10 +162,6 @@ func (hand *Hand) playerBet(player *Player, bet int) error {
 	}
 	if allIn {
 		player.AllIn = true
-		if hand.BetterCount() < 1 {
-			hand.BettingDone = true
-			log.Println("Player allin ended betting")
-		}
 	}
 	player.Funds -= (bet - player.BetAmount)
 	player.BetAmount = bet
@@ -172,8 +171,10 @@ func (hand *Hand) playerBet(player *Player, bet int) error {
 // PlayerAction handles a player action
 func (hand *Hand) PlayerAction(
 	player *Player, action RoundAction) error {
-	if pRing(hand.Round.BetTurn) != player || hand.Round.RoundDone {
-		return errors.New("it's not your turn to bet")
+	if hand.Round == nil {
+		return errors.New("playeraction: there is no round")
+	} else if RingToPlayer(hand.Round.BetTurn) != player || hand.Round.RoundDone {
+		return errors.New("playeraction: it's not your turn to bet")
 	}
 	var err error
 	switch action.actionType {
@@ -193,8 +194,23 @@ func (hand *Hand) PlayerAction(
 	if err != nil {
 		return err
 	}
+	hand.checkForBettingCompletion()
 	hand.nextBetter()
+	if hand.Round.RoundDone {
+		hand.createPots()
+	}
 	return nil
+}
+
+func (hand *Hand) checkForBettingCompletion() {
+	if hand.Players.Len() == 1 {
+		// If there is only 1 player left, the hand is done
+		hand.HandDone = true
+		hand.Round.RoundDone = true
+	} else if hand.BetterCount() <= 1 {
+		// If there is only 1 player left betting dealing must continue
+		hand.BettingDone = true
+	}
 }
 
 func (hand *Hand) nextBetter() {
@@ -204,12 +220,12 @@ func (hand *Hand) nextBetter() {
 	}
 	better := hand.Round.BetTurn.Next()
 	for i := 0; i < better.Len(); i++ {
-		player := pRing(better)
-		if hand.FirstToBet != nil && player == pRing(hand.FirstToBet) {
+		player := RingToPlayer(better)
+		if hand.FirstToBet != nil && player == RingToPlayer(hand.FirstToBet) {
 			log.Println("Back to firsttobet, ending the round", player.Name)
 			break
 		} else if !player.AllIn {
-			log.Println("Found better", pRing(better).Name)
+			log.Println("Found better", RingToPlayer(better).Name)
 			hand.Round.BetTurn = better
 			return
 		}
@@ -219,19 +235,12 @@ func (hand *Hand) nextBetter() {
 }
 
 func (hand *Hand) playerFold() {
-	player := pRing(hand.Round.BetTurn)
+	player := RingToPlayer(hand.Round.BetTurn)
 	player.Hole = []poker.Card{}
 	hand.Pot.MainPot.Pot += player.BetAmount
 	player.BetAmount = 0
 	for _, pot := range append(hand.Pot.SidePots, hand.Pot.MainPot) {
 		delete(pot.Players, player)
-	}
-	if hand.Players.Len() < 3 {
-		hand.HandDone = true
-		log.Println("Player fold ended the hand")
-	} else if hand.BetterCount() < 3 {
-		hand.BettingDone = true
-		log.Println("Player fold ended betting")
 	}
 	if hand.Round.BetTurn == hand.Players {
 		hand.Players = hand.Players.Prev()
@@ -245,7 +254,7 @@ func (hand *Hand) BetterCount() int {
 	betters := 0
 	better := hand.Round.BetTurn
 	for i := 0; i < better.Len(); i++ {
-		player := pRing(better)
+		player := RingToPlayer(better)
 		if !player.AllIn {
 			betters++
 		}
@@ -266,8 +275,29 @@ func (hand *Hand) Deal() error {
 		cardsToDraw = 1
 	}
 	hand.Board = append(hand.Board, hand.Deck.Draw(cardsToDraw)...)
-	hand.Round.RoundDone = false
-	hand.startBets()
+	if !hand.BettingDone {
+		hand.Round.RoundDone = false
+		hand.startBets()
+	} else {
+		hand.Round.RoundDone = true
+		hand.HandDone = len(hand.Board) == 5
+	}
+	return nil
+}
+
+// FinishHand is called when all betting is complete and the pot should be
+// distributed.
+func (hand *Hand) FinishHand() error {
+	if hand.Round == nil {
+		return errors.New("finishhand: there is no round")
+	} else if !hand.Round.RoundDone || !hand.HandDone {
+		return errors.New("finishhand: table is currently betting")
+	}
+	log.Println("Distributing pots")
+	playerRanking := hand.getPlayerRanking()
+	hand.distributePots(playerRanking)
+	// Clear board
+	hand.Board = []poker.Card{}
 	return nil
 }
 
@@ -278,7 +308,7 @@ func (hand *Hand) dealHole(player *Player) {
 // String the hand's string
 func (hand *Hand) String() string {
 	out := ""
-	if hand.Round.RoundDone {
+	if hand.Round != nil && hand.Round.RoundDone {
 		out += "RoundOver\n"
 	}
 	if len(hand.Board) > 0 {
@@ -297,7 +327,7 @@ func (hand *Hand) String() string {
 	hand.Players.Do(func(v interface{}) {
 		p := v.(*Player)
 		out += fmt.Sprint(p)
-		if p == pRing(hand.Round.BetTurn) {
+		if hand.Round != nil && p == RingToPlayer(hand.Round.BetTurn) {
 			out += " (B) "
 		}
 		if p == hand.Dealer() {
