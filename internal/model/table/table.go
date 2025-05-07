@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"time"
 
 	// https://jonathanhsiao.com/blog/evaluating-poker-hands-with-bit-math
 	// Poker hands are represented by bit fields, one which represents
@@ -22,16 +21,10 @@ const (
 	MinPlayersToPlay = 2
 	// MaxTableSize once reached no more players can sit
 	MaxTableSize = 10
-	// MaxStandersSize once reached no more players can stand TODO what happens when standers is full and someone stands up?
+	// MaxStandersSize in conjunction with MaxTableSize defines the maximum number of players at a table.
+	// There can be up to MaxStandersSize + MaxTableSize standers at a table, but once there are a total
+	// of MaxStandersSize + MaxTableSize players at a table no more players may join.
 	MaxStandersSize = 10
-	// AllIn takes the player all in
-	AllIn = ActionType(iota)
-	// Raise the current bet
-	Raise = ActionType(iota)
-	// Call the current bet
-	Call = ActionType(iota)
-	// Fold your hand
-	Fold = ActionType(iota)
 )
 
 type (
@@ -60,34 +53,28 @@ type (
 		TableConfig TableConfig
 		Players     [MaxTableSize]*Player
 		DealerIndex int
-		playing     bool
-		Standers    [MaxStandersSize]*Player
+		Standers    map[string]*Player
 		Hand        *Hand
 	}
 
 	// TableConfig define nuances of the game played at a Table
 	TableConfig struct {
-		minBet              int
-		timeToBet           time.Duration
-		secondsBetweenHands time.Duration
-	}
-
-	// ActionType an action a player can take during their turn in a round
-	ActionType int
-
-	// RoundAction how a player (another goroutine) can interact with the table during their turn in a round
-	RoundAction struct {
-		actionType ActionType
-		bet        int
+		minBet int
 	}
 )
+
+// DefaultConfig creates a default TableConfig.
+func DefaultConfig() TableConfig {
+	return TableConfig{
+		minBet: DefaultMinBet,
+	}
+}
 
 // NewTable create a new table
 func NewTable() *Table {
 	table := NewTableWithConfig(
 		TableConfig{
-			minBet: DefaultMinBet, timeToBet: time.Second * 30,
-			secondsBetweenHands: time.Second * 5,
+			minBet: DefaultMinBet,
 		},
 	)
 	return table
@@ -138,7 +125,7 @@ func (table *Table) playersForHand() (*ring.Ring, Pot) {
 	return out.Prev(), Pot{MainPot: mainPot, SidePots: []SubPot{}}
 }
 
-func (table *Table) incrementDealerIndex() error {
+func (table *Table) IncrementDealerIndex() error {
 	log.Printf("dealer index: %d\n", table.DealerIndex)
 	for i := 1; i < len(table.Players); i++ {
 		dealerIndex := (i + table.DealerIndex) % len(table.Players)
@@ -153,6 +140,17 @@ func (table *Table) incrementDealerIndex() error {
 	return errors.New("incrementdealerindex: could not find next dealer")
 }
 
+// Join stand a player at the table
+func (table *Table) Join(player *Player) error {
+	if _, ok := table.Standers[player.Name]; ok {
+		return errors.New("duplicate name")
+	} else if len(table.Players)+len(table.Standers) >= MaxTableSize+MaxStandersSize {
+		return fmt.Errorf("too many players %d", len(table.Players)+len(table.Standers))
+	}
+	table.Standers[player.Name] = player
+	return nil
+}
+
 // SitDown seat a player at the table
 func (table *Table) SitDown(player *Player, seat int) error {
 	if player.Funds < table.TableConfig.minBet {
@@ -164,17 +162,24 @@ func (table *Table) SitDown(player *Player, seat int) error {
 		table.Players[seat] = player
 		return nil
 	} else {
-		return errors.New("Seat is occupied, " + fmt.Sprint(seat))
+		return errors.New("seat is occupied, " + fmt.Sprint(seat))
 	}
 }
 
+// Leave a player at the next chance
+func (player *Player) Leave() error {
+	if _, ok := player.GetTable().Standers[player.Name]; ok {
+		delete(player.table.Standers, player.Name)
+	}
+	return errors.New("player is not standing at this table")
+}
+
 // StandUp a player at the next chance
-func (player *Player) StandUp() {
+func (player *Player) StandUp() error {
 	if player.Playing {
 		player.WantToStandUp = true
-	} else {
-		player.GetTable().standUp(player)
 	}
+	return player.GetTable().standUp(player)
 }
 
 func (table *Table) standUp(player *Player) error {
@@ -184,10 +189,11 @@ func (table *Table) standUp(player *Player) error {
 			table.Players[i].Standing = true
 			table.Players[i].WantToStandUp = false
 			table.Players[i] = nil
+			table.Standers[player.Name] = player
 			return nil
 		}
 	}
-	return errors.New("Player is not sitting at this table")
+	return errors.New("player is not sitting at this table")
 }
 
 // String player's string
@@ -210,7 +216,7 @@ func (player Player) String() string {
 
 // String table's string
 func (table *Table) String() string {
-	out := fmt.Sprintf("playing: %v, bettingDone: %v, handDone: %v\n", table.playing, table.Hand.BettingDone, table.Hand.HandDone)
+	out := fmt.Sprintf("bettingDone: %v, handDone: %v\n", table.Hand.BettingDone, table.Hand.HandDone)
 	if len(table.Hand.Board) > 0 {
 		out += "Board="
 		for _, c := range table.Hand.Board {
