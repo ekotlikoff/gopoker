@@ -1,6 +1,7 @@
 package chessserver
 
 import (
+	"context"
 	"errors"
 	"log"
 	"sync"
@@ -11,15 +12,6 @@ import (
 )
 
 const (
-	// AllIn takes the player all in
-	AllIn = ActionType(iota)
-	// Raise the current bet
-	Raise = ActionType(iota)
-	// Call the current bet
-	Call = ActionType(iota)
-	// Fold your hand
-	Fold = ActionType(iota)
-
 	// Stand is a player's attempt to stand up from the table.
 	Stand = TableActionType(iota)
 	// Sit is a player's attempt to sit at the table.
@@ -57,7 +49,7 @@ type (
 	Player struct {
 		playerModel *model.Player
 		// Channel for requests from the client directed to the server.
-		requestChan chan RoundAction
+		requestChan chan model.RoundAction
 		// Channel for responses to requests from the client.
 		responseChan chan RoundActionResponse
 		// Channel for responses to requests from the client.
@@ -78,6 +70,7 @@ type (
 		table       *model.Table
 		playing     bool
 		paused      bool
+		players     map[string]*Player
 	}
 	// TableServer is the server that orchestrates one or more ongoing Tables.
 	TableServer struct {
@@ -102,15 +95,6 @@ type (
 	// TableActionResponse is a resposne to a client's TableAction.
 	TableActionResponse struct {
 		success bool
-	}
-
-	// ActionType an action a player can take during their turn in a round.
-	ActionType int
-
-	// RoundAction is a player's interaction with the table during their turn in a round.
-	RoundAction struct {
-		actionType ActionType
-		bet        int
 	}
 
 	// RoundActionResponse is a resposne to a client's RoundAction.
@@ -194,6 +178,7 @@ func (ts *TableServer) Serve() {
 			tableAction.player.tableResponseChan <- TableActionResponse{success: err == nil}
 		case Leave:
 			ts.mutex.Lock()
+			// TODO if leaver is admin, update admin.
 			err := tableAction.player.playerModel.Leave()
 			ts.mutex.Unlock()
 			tableAction.player.tableResponseChan <- TableActionResponse{success: err == nil}
@@ -220,79 +205,197 @@ func (ts *TableServer) Serve() {
 	}
 }
 
+func (t *Table) isPlaying() bool {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.playing
+}
+
+func (t *Table) setPlaying(p bool) {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	t.playing = p
+}
+
+func (t *Table) newHand() {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	t.table.Hand = t.table.NewHand()
+}
+
+func (t *Table) startHand() error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	if err := t.table.Hand.StartHand(); err != nil {
+		t.playing = false
+		return err
+	}
+	return nil
+}
+
+func (t *Table) getDealer() *model.Player {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.table.Hand.Dealer()
+}
+
+func (t *Table) handDone() bool {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.table.Hand.HandDone
+}
+
+func (t *Table) getBoard() []poker.Card {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.table.Hand.Board
+}
+
+func (t *Table) setHandDone(d bool) {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	t.table.Hand.HandDone = d
+}
+
+func (t *Table) finishHand() error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	if err := t.table.Hand.FinishHand(); err != nil {
+		t.playing = false
+		return err
+	}
+	return nil
+}
+
+func (t *Table) getTimeToBet() time.Duration {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.tableConfig.timeToBet
+}
+
+func (t *Table) getTimeBetweenHands() time.Duration {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.tableConfig.timeBetweenHands
+}
+
+func (t *Table) handleStand() {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	for _, p := range t.table.Players {
+		if p != nil && p.WantToStandUp {
+			p.StandUp()
+		}
+	}
+}
+
+func (t *Table) incrementDealerIndex() error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	if err := t.table.IncrementDealerIndex(); err != nil {
+		log.Println(err)
+		t.playing = false
+		return err
+	}
+	return nil
+}
+
 func (ts *TableServer) ServeTable(table *Table) error {
 	// TODO handle table paused
-	if table.playing {
+	if table.isPlaying() {
 		return errors.New("play: table already playing")
 	}
-	table.playing = true
+	table.setPlaying(true)
 	for {
-		table.table.Hand = table.table.NewHand()
-		log.Println("Dealing next hand, dealer is", table.table.Hand.Dealer())
-		if err := table.table.Hand.StartHand(); err != nil {
-			table.playing = false
+		table.newHand()
+		log.Println("Dealing next hand, dealer is", table.getDealer())
+		if err := table.startHand(); err != nil {
 			return err
 		}
-		// TODO convert to using the channels instead
-		table.Hand.ListenForPlayerActions()
-		for !table.table.Hand.HandDone {
+		table.ListenForPlayerActions()
+		for !table.handDone() {
 			table.table.Hand.Deal()
-			// TODO convert to using the channels instead
-			table.table.Hand.ListenForPlayerActions()
-			if len(table.table.Hand.Board) == 5 {
-				table.table.Hand.HandDone = true
+			table.ListenForPlayerActions()
+			if len(table.getBoard()) == 5 {
+				table.setHandDone(true)
 			}
 		}
-		if err := table.table.Hand.FinishHand(); err != nil {
+		if err := table.finishHand(); err != nil {
 			log.Println(err)
-			table.playing = false
 			return err
 		}
-		time.Sleep(time.Second * table.tableConfig.timeBetweenHands)
-		for _, p := range table.table.Players {
-			if p != nil && p.WantToStandUp {
-				p.StandUp()
-			}
-		}
-		if err := table.table.IncrementDealerIndex(); err != nil {
-			log.Println(err)
-			table.playing = false
+		time.Sleep(table.getTimeBetweenHands())
+		table.handleStand()
+		if err := table.incrementDealerIndex(); err != nil {
 			return err
 		}
 	}
 }
 
-// // ListenForPlayerActions get each player's action for the round of bets
-// func (hand *Hand) ListenForPlayerActions() {
-// 	for !hand.Round.RoundDone && !hand.BettingDone && !hand.HandDone {
-// 		success := false
-// 		player := pRing(hand.Round.BetTurn)
-// 		timeRemaining := hand.TableConfig.timeToBet
-// 		for !success {
-// 			ctx, cancel := context.WithTimeout(context.Background(), timeRemaining)
-// 			defer cancel()
-// 			t := time.Now()
-// 			err := hand.PlayerAction(player, getPlayerAction(ctx, player))
-// 			timeRemaining -= time.Since(t)
-// 			if err == nil {
-// 				success = true
-// 			} else {
-// 				log.Println(err)
-// 			}
-// 		}
-// 		log.Println(player.Name, "made their bet")
-// 	}
-// 	log.Println("Round of betting is done")
-// 	hand.Round.RoundDone = true
-// }
+func (t *Table) roundDone() bool {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.table.Hand.Round.RoundDone
+}
 
-// func getPlayerAction(ctx context.Context, player *Player) RoundAction {
-// 	log.Println("Waiting for action from", player.Name)
-// 	action := RoundAction{actionType: Fold}
-// 	select {
-// 	case action = <-player.ActionChan:
-// 	case <-ctx.Done():
-// 		log.Println(player.Name, "timed out, folding")
-// 	}
-// 	return action
-// }
+func (t *Table) setRoundDone(d bool) {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	t.table.Hand.Round.RoundDone = d
+}
+
+func (t *Table) bettingDone() bool {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.table.Hand.BettingDone
+}
+
+func (t *Table) currentBetter() *model.Player {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.table.Hand.Round.BetTurn.Value.(*model.Player)
+}
+
+func (t *Table) handlePlayerAction(player *model.Player, action model.RoundAction) error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.table.Hand.PlayerAction(player, action)
+
+}
+
+// ListenForPlayerActions get each player's action for the round of bets
+func (t *Table) ListenForPlayerActions() {
+	for !t.roundDone() && !t.bettingDone() && !t.handDone() {
+		success := false
+		player := t.currentBetter()
+		timeRemaining := t.getTimeToBet()
+		for !success {
+			ctx, cancel := context.WithTimeout(context.Background(), timeRemaining)
+			defer cancel()
+			n := time.Now()
+			client := t.players[player.Name]
+			err := t.handlePlayerAction(player, getPlayerAction(ctx, client))
+			timeRemaining -= time.Since(n)
+			if err == nil {
+				success = true
+			} else {
+				log.Println(err)
+			}
+			client.responseChan <- RoundActionResponse{err == nil}
+		}
+		log.Println(player.Name, "made their bet")
+	}
+	log.Println("Round of betting is done")
+	t.setRoundDone(true)
+}
+
+func getPlayerAction(ctx context.Context, player *Player) model.RoundAction {
+	log.Println("Waiting for action from", player.playerModel.Name)
+	action := model.RoundAction{ActionType: model.Fold}
+	select {
+	case action = <-player.requestChan:
+	case <-ctx.Done():
+		log.Println(player.playerModel.Name, "timed out, folding")
+	}
+	return action
+}

@@ -82,7 +82,10 @@ func NewTable() *Table {
 
 // NewTableWithConfig create a new table with custom config
 func NewTableWithConfig(tableConfig TableConfig) *Table {
-	table := Table{TableConfig: tableConfig}
+	table := Table{
+		TableConfig: tableConfig,
+		Standers:    make(map[string]*Player),
+	}
 	return &table
 }
 

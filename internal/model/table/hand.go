@@ -9,6 +9,17 @@ import (
 	"github.com/chehsunliu/poker"
 )
 
+const (
+	// AllIn takes the player all in
+	AllIn = ActionType(iota)
+	// Raise the current bet
+	Raise = ActionType(iota)
+	// Call the current bet
+	Call = ActionType(iota)
+	// Fold your hand
+	Fold = ActionType(iota)
+)
+
 type (
 	// Hand can be played and winners will be identified
 	Hand struct {
@@ -41,12 +52,21 @@ type (
 		// If the round of betting is done
 		RoundDone bool
 	}
+
+	// ActionType an action a player can take during their turn in a round.
+	ActionType int
+
+	// RoundAction is a player's interaction with the table during their turn in a round.
+	RoundAction struct {
+		ActionType ActionType
+		Bet        int
+	}
 )
 
 // NewHand create a hand
 func (table *Table) NewHand() *Hand {
 	if table.Players[table.DealerIndex] == nil {
-		table.incrementDealerIndex()
+		table.IncrementDealerIndex()
 	}
 	players, pot := table.playersForHand()
 	return &Hand{
@@ -71,7 +91,7 @@ func (table *Table) FinishHand() error {
 			table.standUp(player)
 		}
 	})
-	return table.incrementDealerIndex()
+	return table.IncrementDealerIndex()
 }
 
 // RingToPlayer converts from a ring buffer to a player
@@ -178,17 +198,17 @@ func (hand *Hand) PlayerAction(
 		return errors.New("playeraction: it's not your turn to bet")
 	}
 	var err error
-	switch action.actionType {
+	switch action.ActionType {
 	case Call:
 		err = hand.playerBet(player, hand.Round.CurrentBet)
 	case AllIn:
-		if player.Funds != action.bet-player.BetAmount {
+		if player.Funds != action.Bet-player.BetAmount {
 			return fmt.Errorf("playeraction: this is not an all in, funds=%d bet=%d",
-				player.Funds, action.bet)
+				player.Funds, action.Bet)
 		}
-		err = hand.playerBet(player, action.bet)
+		err = hand.playerBet(player, action.Bet)
 	case Raise:
-		err = hand.playerBet(player, action.bet)
+		err = hand.playerBet(player, action.Bet)
 	case Fold:
 		hand.playerFold()
 	}

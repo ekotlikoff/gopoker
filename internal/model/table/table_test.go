@@ -3,7 +3,6 @@ package model
 import (
 	"fmt"
 	"testing"
-	"time"
 )
 
 func TestStartHand(t *testing.T) {
@@ -83,9 +82,6 @@ func TestAllInSmallBlind(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if table.playing {
-		t.Error("table should be done playing")
-	}
 	totalFunds := table.Players[0].Funds + table.Players[2].Funds + table.Players[3].Funds
 	if totalFunds != 600 {
 		t.Error("expected 600 got", totalFunds)
@@ -94,8 +90,7 @@ func TestAllInSmallBlind(t *testing.T) {
 
 func TestAllIn(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DefaultMinBet, timeToBet: time.Second * 30,
-		secondsBetweenHands: time.Second * 0,
+		minBet: DefaultMinBet,
 	})
 	leto := NewPlayerWithFunds("Leto", 500)
 	table.SitDown(leto, 0)
@@ -113,9 +108,6 @@ func TestAllIn(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if table.playing {
-		t.Error("table should be done playing")
-	}
 	totalFunds := paul.Funds + leto.Funds
 	if totalFunds != 900 {
 		t.Error("expected 800 got", totalFunds)
@@ -124,8 +116,7 @@ func TestAllIn(t *testing.T) {
 
 func TestFoldWin(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DefaultMinBet, timeToBet: time.Second * 30,
-		secondsBetweenHands: time.Second * 0,
+		minBet: DefaultMinBet,
 	})
 	leto := NewPlayerWithFunds("Leto", 400)
 	table.SitDown(leto, 0)
@@ -141,10 +132,6 @@ func TestFoldWin(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if table.playing {
-		t.Log(table)
-		t.Error("table should be done playing")
-	}
 	totalFunds := paul.Funds + leto.Funds
 	if totalFunds != 800 {
 		t.Error("expected 800 got", totalFunds)
@@ -153,8 +140,7 @@ func TestFoldWin(t *testing.T) {
 
 func TestRematch(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DefaultMinBet, timeToBet: time.Second * 30,
-		secondsBetweenHands: time.Second * 0,
+		minBet: DefaultMinBet,
 	})
 	leto := NewPlayerWithFunds("Leto", 400)
 	table.SitDown(leto, 0)
@@ -172,9 +158,6 @@ func TestRematch(t *testing.T) {
 		t.Error(err)
 	}
 	totalFunds := paul.Funds + leto.Funds
-	if table.playing {
-		t.Error("table should be done playing")
-	}
 	if totalFunds != 800 {
 		t.Error("expected 800 got", totalFunds)
 	}
@@ -190,9 +173,6 @@ func TestRematch(t *testing.T) {
 		t.Error(err)
 	}
 	totalFunds = paul.Funds + leto.Funds
-	if table.playing {
-		t.Error("table should be done playing")
-	}
 	if totalFunds != 800 {
 		t.Error("expected 800 got", totalFunds)
 	}
@@ -200,8 +180,7 @@ func TestRematch(t *testing.T) {
 
 func TestRematchPlayerOutOfFunds(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DefaultMinBet, timeToBet: time.Second * 30,
-		secondsBetweenHands: time.Second * 0,
+		minBet: DefaultMinBet,
 	})
 	leto := NewPlayerWithFunds("Leto", 400)
 	table.SitDown(leto, 0)
@@ -233,9 +212,6 @@ func TestRematchPlayerOutOfFunds(t *testing.T) {
 		t.Error(err)
 	}
 	totalFunds := paul.Funds + leto.Funds + frank.Funds
-	if table.playing {
-		t.Error("table should be done playing")
-	}
 	if totalFunds != 1200 {
 		t.Error("expected 1200 got", totalFunds)
 	}
@@ -247,8 +223,7 @@ func TestRematchPlayerOutOfFunds(t *testing.T) {
 
 func TestRematchNoPlayersLeft(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DefaultMinBet, timeToBet: time.Second * 30,
-		secondsBetweenHands: time.Second * 0,
+		minBet: DefaultMinBet,
 	})
 	leto := NewPlayerWithFunds("Leto", 400)
 	table.SitDown(leto, 0)
@@ -266,9 +241,6 @@ func TestRematchNoPlayersLeft(t *testing.T) {
 	table.Hand.Deal()
 	table.FinishHand()
 	totalFunds := paul.Funds + leto.Funds
-	if table.playing {
-		t.Error("table should be done playing")
-	}
 	if totalFunds != 800 {
 		t.Error("expected 800 got", totalFunds)
 	}
