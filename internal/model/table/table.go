@@ -110,14 +110,14 @@ func (t *Table) playersForHand() (*ring.Ring, Pot) {
 	index := (t.DealerIndex + 1) % len(t.Players)
 	var playersPlaying []*Player
 	for i := 0; i < len(t.Players); i++ {
-		player := t.Players[index]
-		if player != nil {
-			if player.Funds <= 0 {
-				player.Standing = true
+		p := t.Players[index]
+		if p != nil {
+			if p.Funds <= 0 {
+				p.Standing = true
 				t.Players[index] = nil
 			} else {
-				playersPlaying = append(playersPlaying, player)
-				mainPot.Players[player] = struct{}{}
+				playersPlaying = append(playersPlaying, p)
+				mainPot.Players[p] = struct{}{}
 			}
 		}
 		index = (index + 1) % len(t.Players)
@@ -143,9 +143,9 @@ func (t *Table) IncrementDealerIndex() error {
 	for i := 1; i < len(t.Players); i++ {
 		dealerIndex := (i + t.DealerIndex) % len(t.Players)
 		log.Println("index", dealerIndex)
-		player := t.Players[dealerIndex]
-		if player != nil && player.Playing && i != t.DealerIndex {
-			log.Printf("found player: %s, index: %d", player.Name, dealerIndex)
+		p := t.Players[dealerIndex]
+		if p != nil && p.Playing && i != t.DealerIndex {
+			log.Printf("found player: %s, index: %d", p.Name, dealerIndex)
 			t.DealerIndex = dealerIndex
 			return nil
 		}
@@ -154,31 +154,32 @@ func (t *Table) IncrementDealerIndex() error {
 }
 
 // Join stand a player at the table
-func (t *Table) Join(player *Player) error {
-	if _, ok := t.Standers[player.Name]; ok {
+func (t *Table) Join(p *Player) error {
+	if _, ok := t.Standers[p.Name]; ok {
 		return errors.New("duplicate name")
 	} else if len(t.Players)+len(t.Standers) >= MaxTableSize+MaxStandersSize {
 		return fmt.Errorf("too many players %d", len(t.Players)+len(t.Standers))
 	}
-	t.Standers[player.Name] = player
+	t.Standers[p.Name] = p
 	return nil
 }
 
 // SitDown seat a player at the table
-func (t *Table) SitDown(player *Player, seat int) error {
-	if player.Funds < t.TableConfig.minBet {
+func (t *Table) SitDown(p *Player, seat int) error {
+	if p.Funds < t.TableConfig.minBet {
 		return errors.New("Player has insufficient funds to sit")
 	} else if seat >= MaxTableSize {
 		return errors.New("Seat, " + fmt.Sprint(seat) +
 			" is greater than max table size, " + fmt.Sprint(MaxTableSize))
 	} else if t.Players[seat] == nil {
-		t.Players[seat] = player
+		t.Players[seat] = p
 		return nil
 	} else {
 		return errors.New("seat is occupied, " + fmt.Sprint(seat))
 	}
 }
 
+// Leave removes a stander at the table
 func (t *Table) Leave(p *Player) error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -216,20 +217,20 @@ func (t *Table) HandleStanders() {
 }
 
 // StandUp a player at the next chance
-func (player *Player) StandUp() {
-	player.WantToStandUp = true
+func (p *Player) StandUp() {
+	p.WantToStandUp = true
 }
 
-func (t *Table) standUp(player *Player) error {
+func (t *Table) standUp(p *Player) error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	for i, p := range t.Players {
+	for i, player := range t.Players {
 		if p == player {
 			t.Players[i].Playing = false
 			t.Players[i].Standing = true
 			t.Players[i].WantToStandUp = false
 			t.Players[i] = nil
-			t.Standers[player.Name] = player
+			t.Standers[p.Name] = player
 			return nil
 		}
 	}
@@ -265,29 +266,29 @@ func (t *Table) CurrentBetter() *Player {
 }
 
 // HandlePlayerAction handles a player's desired action
-func (t *Table) HandlePlayerAction(player *Player, action RoundAction) error {
+func (t *Table) HandlePlayerAction(p *Player, action RoundAction) error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	return t.Hand.PlayerAction(player, action)
+	return t.Hand.PlayerAction(p, action)
 
 }
 
 // String player's string
-func (player Player) String() string {
+func (p Player) String() string {
 	cards := ""
 	betAmount := ""
-	if player.Playing {
-		if len(player.Hole) > 0 {
+	if p.Playing {
+		if len(p.Hole) > 0 {
 			cards = ", Cards: "
 		}
-		for _, c := range player.Hole {
+		for _, c := range p.Hole {
 			cards += fmt.Sprint(c) + " "
 		}
-		betAmount = fmt.Sprintf(", BetAmount: %d", player.BetAmount)
+		betAmount = fmt.Sprintf(", BetAmount: %d", p.BetAmount)
 	} else {
 		betAmount = ", not playing"
 	}
-	return fmt.Sprintf("%s, funds: %v%v %s", player.Name, player.Funds, betAmount, cards)
+	return fmt.Sprintf("%s, funds: %v%v %s", p.Name, p.Funds, betAmount, cards)
 }
 
 // String table's string
@@ -321,8 +322,8 @@ func (t *Table) String() string {
 }
 
 // GetTable get the player's table
-func (player *Player) GetTable() *Table {
-	return player.table
+func (p *Player) GetTable() *Table {
+	return p.table
 }
 
 // // Play rounds at the table
