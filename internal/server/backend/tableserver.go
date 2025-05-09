@@ -77,7 +77,7 @@ type (
 		tableServerConfig TableServerConfig
 		tables            map[string]*Table
 		tableActions      chan TableAction
-		mutex             *sync.Mutex
+		mutex             sync.Mutex
 	}
 
 	// TableActionType is the type of action a player can take on a table outside of an ongoing game.
@@ -166,9 +166,9 @@ func (ts *TableServer) Serve() {
 			tableAction.player.tableResponseChan <- TableActionResponse{success: err == nil}
 		case Stand:
 			ts.mutex.Lock()
-			err := tableAction.player.playerModel.StandUp()
+			tableAction.player.playerModel.StandUp()
 			ts.mutex.Unlock()
-			tableAction.player.tableResponseChan <- TableActionResponse{success: err == nil}
+			tableAction.player.tableResponseChan <- TableActionResponse{true}
 		case Sit:
 			ts.mutex.Lock()
 			err := tableAction.player.playerModel.GetTable().SitDown(
@@ -217,56 +217,6 @@ func (t *Table) setPlaying(p bool) {
 	t.playing = p
 }
 
-func (t *Table) newHand() {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	t.table.Hand = t.table.NewHand()
-}
-
-func (t *Table) startHand() error {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	if err := t.table.Hand.StartHand(); err != nil {
-		t.playing = false
-		return err
-	}
-	return nil
-}
-
-func (t *Table) getDealer() *model.Player {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	return t.table.Hand.Dealer()
-}
-
-func (t *Table) handDone() bool {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	return t.table.Hand.HandDone
-}
-
-func (t *Table) getBoard() []poker.Card {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	return t.table.Hand.Board
-}
-
-func (t *Table) setHandDone(d bool) {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	t.table.Hand.HandDone = d
-}
-
-func (t *Table) finishHand() error {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	if err := t.table.Hand.FinishHand(); err != nil {
-		t.playing = false
-		return err
-	}
-	return nil
-}
-
 func (t *Table) getTimeToBet() time.Duration {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -277,16 +227,6 @@ func (t *Table) getTimeBetweenHands() time.Duration {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	return t.tableConfig.timeBetweenHands
-}
-
-func (t *Table) handleStand() {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	for _, p := range t.table.Players {
-		if p != nil && p.WantToStandUp {
-			p.StandUp()
-		}
-	}
 }
 
 func (t *Table) incrementDealerIndex() error {
@@ -300,81 +240,52 @@ func (t *Table) incrementDealerIndex() error {
 	return nil
 }
 
-func (ts *TableServer) ServeTable(table *Table) error {
+func (ts *TableServer) ServeTable(t *Table) error {
 	// TODO handle table paused
-	if table.isPlaying() {
+	if t.isPlaying() {
 		return errors.New("play: table already playing")
 	}
-	table.setPlaying(true)
+	t.setPlaying(true)
 	for {
-		table.newHand()
-		log.Println("Dealing next hand, dealer is", table.getDealer())
-		if err := table.startHand(); err != nil {
+		t.table.NewHand()
+		log.Println("Dealing next hand, dealer is", t.table.Dealer())
+		if err := t.table.StartHand(); err != nil {
+			t.setPlaying(false)
 			return err
 		}
-		table.ListenForPlayerActions()
-		for !table.handDone() {
-			table.table.Hand.Deal()
-			table.ListenForPlayerActions()
-			if len(table.getBoard()) == 5 {
-				table.setHandDone(true)
+		t.ListenForPlayerActions()
+		for !t.table.HandDone() {
+			t.table.Deal()
+			t.ListenForPlayerActions()
+			if len(t.table.Board()) == 5 {
+				t.table.SetHandDone(true)
 			}
 		}
-		if err := table.finishHand(); err != nil {
+		if err := t.table.FinishHand(); err != nil {
+			t.setPlaying(false)
 			log.Println(err)
 			return err
 		}
-		time.Sleep(table.getTimeBetweenHands())
-		table.handleStand()
-		if err := table.incrementDealerIndex(); err != nil {
+		time.Sleep(t.getTimeBetweenHands())
+		t.table.HandleStanders()
+		if err := t.incrementDealerIndex(); err != nil {
 			return err
 		}
 	}
-}
-
-func (t *Table) roundDone() bool {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	return t.table.Hand.Round.RoundDone
-}
-
-func (t *Table) setRoundDone(d bool) {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	t.table.Hand.Round.RoundDone = d
-}
-
-func (t *Table) bettingDone() bool {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	return t.table.Hand.BettingDone
-}
-
-func (t *Table) currentBetter() *model.Player {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	return t.table.Hand.Round.BetTurn.Value.(*model.Player)
-}
-
-func (t *Table) handlePlayerAction(player *model.Player, action model.RoundAction) error {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	return t.table.Hand.PlayerAction(player, action)
-
 }
 
 // ListenForPlayerActions get each player's action for the round of bets
 func (t *Table) ListenForPlayerActions() {
-	for !t.roundDone() && !t.bettingDone() && !t.handDone() {
+	for !t.table.RoundDone() && !t.table.BettingDone() && !t.table.HandDone() {
 		success := false
-		player := t.currentBetter()
+		player := t.table.CurrentBetter()
 		timeRemaining := t.getTimeToBet()
 		for !success {
 			ctx, cancel := context.WithTimeout(context.Background(), timeRemaining)
 			defer cancel()
 			n := time.Now()
 			client := t.players[player.Name]
-			err := t.handlePlayerAction(player, getPlayerAction(ctx, client))
+			err := t.table.HandlePlayerAction(player, getPlayerAction(ctx, client))
 			timeRemaining -= time.Since(n)
 			if err == nil {
 				success = true
@@ -386,7 +297,7 @@ func (t *Table) ListenForPlayerActions() {
 		log.Println(player.Name, "made their bet")
 	}
 	log.Println("Round of betting is done")
-	t.setRoundDone(true)
+	t.table.SetRoundDone(true)
 }
 
 func getPlayerAction(ctx context.Context, player *Player) model.RoundAction {

@@ -64,12 +64,14 @@ type (
 )
 
 // NewHand create a hand
-func (table *Table) NewHand() *Hand {
+func (table *Table) NewHand() {
+	table.mutex.Lock()
+	defer table.mutex.Unlock()
 	if table.Players[table.DealerIndex] == nil {
 		table.IncrementDealerIndex()
 	}
 	players, pot := table.playersForHand()
-	return &Hand{
+	table.Hand = &Hand{
 		Deck:        poker.Deck{},
 		TableConfig: table.TableConfig,
 		Players:     players,
@@ -79,6 +81,8 @@ func (table *Table) NewHand() *Hand {
 
 // FinishHand ends a hand and handles standing players up
 func (table *Table) FinishHand() error {
+	table.mutex.Lock()
+	defer table.mutex.Unlock()
 	err := table.Hand.FinishHand()
 	if err != nil {
 		return err
@@ -87,8 +91,8 @@ func (table *Table) FinishHand() error {
 	table.Hand.Players.Do(func(p interface{}) {
 		player := p.(*Player)
 		player.Hole = []poker.Card{}
-		if player.Funds == 0 || player.WantToStandUp {
-			table.standUp(player)
+		if player.Funds == 0 {
+			player.StandUp()
 		}
 	})
 	return table.IncrementDealerIndex()
@@ -114,6 +118,24 @@ func (hand *Hand) StartHand() error {
 	}
 	hand.startBets()
 	return nil
+}
+
+func (t *Table) Dealer() *Player {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.Hand.Dealer()
+}
+
+func (t *Table) Board() []poker.Card {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.Hand.Board
+}
+
+func (t *Table) SetHandDone(d bool) {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	t.Hand.HandDone = d
 }
 
 // Dealer is the dealer of the hand
@@ -282,6 +304,18 @@ func (hand *Hand) BetterCount() int {
 		better = better.Next()
 	}
 	return betters
+}
+
+func (table *Table) HandDone() bool {
+	table.mutex.Lock()
+	defer table.mutex.Unlock()
+	return table.Hand.HandDone
+}
+
+func (table *Table) Deal() error {
+	table.mutex.Lock()
+	defer table.mutex.Unlock()
+	return table.Hand.Deal()
 }
 
 // Deal adds shared cards on the board

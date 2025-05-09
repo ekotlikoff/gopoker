@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 
 	// https://jonathanhsiao.com/blog/evaluating-poker-hands-with-bit-math
 	// Poker hands are represented by bit fields, one which represents
@@ -55,6 +56,7 @@ type (
 		DealerIndex int
 		Standers    map[string]*Player
 		Hand        *Hand
+		mutex       sync.Mutex
 	}
 
 	// TableConfig define nuances of the game played at a Table
@@ -128,6 +130,12 @@ func (table *Table) playersForHand() (*ring.Ring, Pot) {
 	return out.Prev(), Pot{MainPot: mainPot, SidePots: []SubPot{}}
 }
 
+func (table *Table) StartHand() error {
+	table.mutex.Lock()
+	defer table.mutex.Unlock()
+	return table.Hand.StartHand()
+}
+
 func (table *Table) IncrementDealerIndex() error {
 	log.Printf("dealer index: %d\n", table.DealerIndex)
 	for i := 1; i < len(table.Players); i++ {
@@ -177,15 +185,34 @@ func (player *Player) Leave() error {
 	return errors.New("player is not standing at this table")
 }
 
-// StandUp a player at the next chance
-func (player *Player) StandUp() error {
-	if player.Playing {
-		player.WantToStandUp = true
+func (table *Table) GetPlayers() [MaxTableSize]*Player {
+	table.mutex.Lock()
+	defer table.mutex.Unlock()
+	return table.Players
+}
+
+func (table *Table) HandleStanders() {
+	table.mutex.Lock()
+	defer table.mutex.Unlock()
+	for i, p := range table.Players {
+		if p != nil && p.WantToStandUp {
+			table.Players[i].Playing = false
+			table.Players[i].Standing = true
+			table.Players[i].WantToStandUp = false
+			table.Players[i] = nil
+			table.Standers[p.Name] = p
+		}
 	}
-	return player.GetTable().standUp(player)
+}
+
+// StandUp a player at the next chance
+func (player *Player) StandUp() {
+	player.WantToStandUp = true
 }
 
 func (table *Table) standUp(player *Player) error {
+	table.mutex.Lock()
+	defer table.mutex.Unlock()
 	for i, p := range table.Players {
 		if p == player {
 			table.Players[i].Playing = false
@@ -197,6 +224,37 @@ func (table *Table) standUp(player *Player) error {
 		}
 	}
 	return errors.New("player is not sitting at this table")
+}
+
+func (t *Table) RoundDone() bool {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.Hand.Round.RoundDone
+}
+
+func (t *Table) SetRoundDone(d bool) {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	t.Hand.Round.RoundDone = d
+}
+
+func (t *Table) BettingDone() bool {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.Hand.BettingDone
+}
+
+func (t *Table) CurrentBetter() *Player {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.Hand.Round.BetTurn.Value.(*Player)
+}
+
+func (t *Table) HandlePlayerAction(player *Player, action RoundAction) error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.Hand.PlayerAction(player, action)
+
 }
 
 // String player's string

@@ -11,7 +11,7 @@ func TestStartHand(t *testing.T) {
 	table.SitDown(&Player{Name: "Joe", Funds: 200}, 2)
 	table.SitDown(&Player{Name: "Bob", Funds: 200}, 4)
 	table.SitDown(&Player{Name: "Nora", Funds: 200}, 5)
-	table.Hand = table.NewHand()
+	table.NewHand()
 	err := table.Hand.StartHand()
 	if err != nil {
 		t.Error(err)
@@ -35,7 +35,7 @@ func TestStartHandAllInSmallBlind(t *testing.T) {
 	table.SitDown(&Player{Name: "Anna", Funds: 300}, 0)
 	table.SitDown(&Player{Name: "Joe", Funds: 200}, 2)
 	table.Players[2].Funds = 100
-	table.Hand = table.NewHand()
+	table.NewHand()
 	hand := table.Hand
 	fmt.Println(hand.StartHand())
 	if table.Players[2].BetAmount != 100 {
@@ -54,7 +54,7 @@ func TestBigBlindGetsToRaise(t *testing.T) {
 	table.SitDown(&Player{Name: "Anna", Funds: 300}, 0)
 	table.SitDown(&Player{Name: "Joe", Funds: 200}, 2)
 	table.SitDown(&Player{Name: "Baker", Funds: 400}, 3)
-	table.Hand = table.NewHand()
+	table.NewHand()
 	hand := table.Hand
 	fmt.Println(hand.StartHand())
 	table.Hand.PlayerAction(table.Players[0], RoundAction{Call, 200})
@@ -71,7 +71,7 @@ func TestAllInSmallBlind(t *testing.T) {
 	table.SitDown(&Player{Name: "Joe", Funds: 200}, 2)
 	table.SitDown(&Player{Name: "Baker", Funds: 200}, 3)
 	table.Players[2].Funds = 100
-	table.Hand = table.NewHand()
+	table.NewHand()
 	hand := table.Hand
 	fmt.Println(hand.StartHand())
 	table.Hand.PlayerAction(table.Players[0], RoundAction{Call, 200})
@@ -96,7 +96,7 @@ func TestAllIn(t *testing.T) {
 	table.SitDown(leto, 0)
 	paul := NewPlayerWithFunds("Paul", 400)
 	table.SitDown(paul, 2)
-	table.Hand = table.NewHand()
+	table.NewHand()
 	fmt.Println(table.Hand.StartHand())
 	table.Hand.PlayerAction(table.Players[2], RoundAction{Raise, 400})
 	table.Hand.PlayerAction(table.Players[0], RoundAction{Call, 400})
@@ -122,7 +122,7 @@ func TestFoldWin(t *testing.T) {
 	table.SitDown(leto, 0)
 	paul := NewPlayerWithFunds("Paul", 400)
 	table.SitDown(paul, 2)
-	table.Hand = table.NewHand()
+	table.NewHand()
 	table.Hand.StartHand()
 	err := table.Hand.PlayerAction(table.Players[2], RoundAction{Fold, 0})
 	if err != nil {
@@ -146,7 +146,7 @@ func TestRematch(t *testing.T) {
 	table.SitDown(leto, 0)
 	paul := NewPlayerWithFunds("Paul", 400)
 	table.SitDown(paul, 2)
-	table.Hand = table.NewHand()
+	table.NewHand()
 	fmt.Println(table.Hand.StartHand())
 	err := table.Hand.PlayerAction(table.Players[2], RoundAction{Fold, 0})
 	if err != nil {
@@ -161,7 +161,7 @@ func TestRematch(t *testing.T) {
 	if totalFunds != 800 {
 		t.Error("expected 800 got", totalFunds)
 	}
-	table.Hand = table.NewHand()
+	table.NewHand()
 	fmt.Println(table.Hand.StartHand())
 	err = table.Hand.PlayerAction(table.Players[0], RoundAction{Fold, 0})
 	if err != nil {
@@ -188,7 +188,7 @@ func TestRematchPlayerOutOfFunds(t *testing.T) {
 	table.SitDown(paul, 2)
 	frank := NewPlayerWithFunds("Frank", 400)
 	table.SitDown(frank, 3)
-	table.Hand = table.NewHand()
+	table.NewHand()
 	table.Hand.StartHand()
 	if table.Hand.Players.Len() != 3 {
 		t.Error("expected 3 players, got", table.Hand.Players.Len())
@@ -215,7 +215,7 @@ func TestRematchPlayerOutOfFunds(t *testing.T) {
 	if totalFunds != 1200 {
 		t.Error("expected 1200 got", totalFunds)
 	}
-	table.Hand = table.NewHand()
+	table.NewHand()
 	if table.Hand.Players.Len() != 2 {
 		t.Error("expected 2 players, got", table.Hand.Players.Len())
 	}
@@ -229,7 +229,7 @@ func TestRematchNoPlayersLeft(t *testing.T) {
 	table.SitDown(leto, 0)
 	paul := NewPlayerWithFunds("Paul", 400)
 	table.SitDown(paul, 2)
-	table.Hand = table.NewHand()
+	table.NewHand()
 	fmt.Println(table.Hand.StartHand())
 	table.Hand.PlayerAction(table.Players[2], RoundAction{AllIn, 400})
 	err := table.Hand.PlayerAction(table.Players[0], RoundAction{Call, 400})
@@ -244,7 +244,7 @@ func TestRematchNoPlayersLeft(t *testing.T) {
 	if totalFunds != 800 {
 		t.Error("expected 800 got", totalFunds)
 	}
-	table.Hand = table.NewHand()
+	table.NewHand()
 	err = table.Hand.StartHand()
 	if err == nil {
 		t.Error("expected error starting next hand, got no error")
