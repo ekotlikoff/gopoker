@@ -69,6 +69,6 @@ for MOD_FILE in $(find . -name 'go.mod'); do
 done
 
 SC_OUT="$(mktemp)"
-staticcheck -go 1.18 -checks 'inherit,-ST1015' ./... > "${SC_OUT}" || true
+staticcheck -go 1.22 -checks 'inherit,-ST1015' ./... > "${SC_OUT}" || true
 # Error if anything other than deprecation warnings are printed.
 not grep -v "is deprecated:.*SA1019" "${SC_OUT}"
