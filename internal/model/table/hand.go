@@ -64,38 +64,38 @@ type (
 )
 
 // NewHand create a hand
-func (table *Table) NewHand() {
-	table.mutex.Lock()
-	defer table.mutex.Unlock()
-	if table.Players[table.DealerIndex] == nil {
-		table.IncrementDealerIndex()
+func (t *Table) NewHand() {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	if t.Players[t.DealerIndex] == nil {
+		t.IncrementDealerIndex()
 	}
-	players, pot := table.playersForHand()
-	table.Hand = &Hand{
+	players, pot := t.playersForHand()
+	t.Hand = &Hand{
 		Deck:        poker.Deck{},
-		TableConfig: table.TableConfig,
+		TableConfig: t.TableConfig,
 		Players:     players,
 		Pot:         pot,
 	}
 }
 
 // FinishHand ends a hand and handles standing players up
-func (table *Table) FinishHand() error {
-	table.mutex.Lock()
-	defer table.mutex.Unlock()
-	err := table.Hand.FinishHand()
+func (t *Table) FinishHand() error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	err := t.Hand.FinishHand()
 	if err != nil {
 		return err
 	}
 	// Clear player holes and handle standups
-	table.Hand.Players.Do(func(p interface{}) {
+	t.Hand.Players.Do(func(p interface{}) {
 		player := p.(*Player)
 		player.Hole = []poker.Card{}
 		if player.Funds == 0 {
 			player.StandUp()
 		}
 	})
-	return table.IncrementDealerIndex()
+	return t.IncrementDealerIndex()
 }
 
 // RingToPlayer converts from a ring buffer to a player
@@ -120,18 +120,21 @@ func (hand *Hand) StartHand() error {
 	return nil
 }
 
+// Dealer gets current dealer
 func (t *Table) Dealer() *Player {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	return t.Hand.Dealer()
 }
 
+// Board gets the current board
 func (t *Table) Board() []poker.Card {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	return t.Hand.Board
 }
 
+// SetHandDone sets whether the hand is done
 func (t *Table) SetHandDone(d bool) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -306,16 +309,18 @@ func (hand *Hand) BetterCount() int {
 	return betters
 }
 
-func (table *Table) HandDone() bool {
-	table.mutex.Lock()
-	defer table.mutex.Unlock()
-	return table.Hand.HandDone
+// HandDone return whether the hand is done
+func (t *Table) HandDone() bool {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.Hand.HandDone
 }
 
-func (table *Table) Deal() error {
-	table.mutex.Lock()
-	defer table.mutex.Unlock()
-	return table.Hand.Deal()
+// Deal deals a hand
+func (t *Table) Deal() error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.Hand.Deal()
 }
 
 // Deal adds shared cards on the board

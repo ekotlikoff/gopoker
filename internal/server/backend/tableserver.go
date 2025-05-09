@@ -126,6 +126,7 @@ type (
 	}
 )
 
+// DefaultTableGenerator generates a default table config
 func DefaultTableGenerator() TableConfig {
 	return TableConfig{
 		timeToBet:        defaultTimeToBet,
@@ -134,10 +135,12 @@ func DefaultTableGenerator() TableConfig {
 	}
 }
 
+// StartTableServer starts the table server
 func (ts *TableServer) StartTableServer(quit chan bool) {
 	go ts.Serve()
 }
 
+// NewTable creates a new table on the server
 func (ts *TableServer) NewTable(name string, config model.TableConfig, creator string) error {
 	ts.mutex.Lock()
 	defer ts.mutex.Unlock()
@@ -240,6 +243,7 @@ func (t *Table) incrementDealerIndex() error {
 	return nil
 }
 
+// ServeTable begins serving a table for play
 func (ts *TableServer) ServeTable(t *Table) error {
 	// TODO handle table paused
 	if t.isPlaying() {

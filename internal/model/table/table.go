@@ -105,22 +105,22 @@ func NewPlayerWithFunds(name string, funds int) *Player {
 }
 
 // Returns ring starting at the dealer
-func (table *Table) playersForHand() (*ring.Ring, Pot) {
+func (t *Table) playersForHand() (*ring.Ring, Pot) {
 	mainPot := SubPot{make(map[*Player]struct{}), 0}
-	index := (table.DealerIndex + 1) % len(table.Players)
+	index := (t.DealerIndex + 1) % len(t.Players)
 	var playersPlaying []*Player
-	for i := 0; i < len(table.Players); i++ {
-		player := table.Players[index]
+	for i := 0; i < len(t.Players); i++ {
+		player := t.Players[index]
 		if player != nil {
 			if player.Funds <= 0 {
 				player.Standing = true
-				table.Players[index] = nil
+				t.Players[index] = nil
 			} else {
 				playersPlaying = append(playersPlaying, player)
 				mainPot.Players[player] = struct{}{}
 			}
 		}
-		index = (index + 1) % len(table.Players)
+		index = (index + 1) % len(t.Players)
 	}
 	out := ring.New(len(playersPlaying))
 	for _, p := range playersPlaying {
@@ -130,21 +130,23 @@ func (table *Table) playersForHand() (*ring.Ring, Pot) {
 	return out.Prev(), Pot{MainPot: mainPot, SidePots: []SubPot{}}
 }
 
-func (table *Table) StartHand() error {
-	table.mutex.Lock()
-	defer table.mutex.Unlock()
-	return table.Hand.StartHand()
+// StartHand starts a hand
+func (t *Table) StartHand() error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.Hand.StartHand()
 }
 
-func (table *Table) IncrementDealerIndex() error {
-	log.Printf("dealer index: %d\n", table.DealerIndex)
-	for i := 1; i < len(table.Players); i++ {
-		dealerIndex := (i + table.DealerIndex) % len(table.Players)
+// IncrementDealerIndex increments the current dealer
+func (t *Table) IncrementDealerIndex() error {
+	log.Printf("dealer index: %d\n", t.DealerIndex)
+	for i := 1; i < len(t.Players); i++ {
+		dealerIndex := (i + t.DealerIndex) % len(t.Players)
 		log.Println("index", dealerIndex)
-		player := table.Players[dealerIndex]
-		if player != nil && player.Playing && i != table.DealerIndex {
+		player := t.Players[dealerIndex]
+		if player != nil && player.Playing && i != t.DealerIndex {
 			log.Printf("found player: %s, index: %d", player.Name, dealerIndex)
-			table.DealerIndex = dealerIndex
+			t.DealerIndex = dealerIndex
 			return nil
 		}
 	}
@@ -152,55 +154,63 @@ func (table *Table) IncrementDealerIndex() error {
 }
 
 // Join stand a player at the table
-func (table *Table) Join(player *Player) error {
-	if _, ok := table.Standers[player.Name]; ok {
+func (t *Table) Join(player *Player) error {
+	if _, ok := t.Standers[player.Name]; ok {
 		return errors.New("duplicate name")
-	} else if len(table.Players)+len(table.Standers) >= MaxTableSize+MaxStandersSize {
-		return fmt.Errorf("too many players %d", len(table.Players)+len(table.Standers))
+	} else if len(t.Players)+len(t.Standers) >= MaxTableSize+MaxStandersSize {
+		return fmt.Errorf("too many players %d", len(t.Players)+len(t.Standers))
 	}
-	table.Standers[player.Name] = player
+	t.Standers[player.Name] = player
 	return nil
 }
 
 // SitDown seat a player at the table
-func (table *Table) SitDown(player *Player, seat int) error {
-	if player.Funds < table.TableConfig.minBet {
+func (t *Table) SitDown(player *Player, seat int) error {
+	if player.Funds < t.TableConfig.minBet {
 		return errors.New("Player has insufficient funds to sit")
 	} else if seat >= MaxTableSize {
 		return errors.New("Seat, " + fmt.Sprint(seat) +
 			" is greater than max table size, " + fmt.Sprint(MaxTableSize))
-	} else if table.Players[seat] == nil {
-		table.Players[seat] = player
+	} else if t.Players[seat] == nil {
+		t.Players[seat] = player
 		return nil
 	} else {
 		return errors.New("seat is occupied, " + fmt.Sprint(seat))
 	}
 }
 
-// Leave a player at the next chance
-func (player *Player) Leave() error {
-	if _, ok := player.GetTable().Standers[player.Name]; ok {
-		delete(player.table.Standers, player.Name)
+func (t *Table) Leave(p *Player) error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	if _, ok := t.Standers[p.Name]; ok {
+		delete(t.Standers, p.Name)
 	}
 	return errors.New("player is not standing at this table")
 }
 
-func (table *Table) GetPlayers() [MaxTableSize]*Player {
-	table.mutex.Lock()
-	defer table.mutex.Unlock()
-	return table.Players
+// Leave a player at the next chance
+func (p *Player) Leave() error {
+	return p.GetTable().Leave(p)
 }
 
-func (table *Table) HandleStanders() {
-	table.mutex.Lock()
-	defer table.mutex.Unlock()
-	for i, p := range table.Players {
+// GetPlayers returns the table's players
+func (t *Table) GetPlayers() [MaxTableSize]*Player {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.Players
+}
+
+// HandleStanders stands up players that want to stand
+func (t *Table) HandleStanders() {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	for i, p := range t.Players {
 		if p != nil && p.WantToStandUp {
-			table.Players[i].Playing = false
-			table.Players[i].Standing = true
-			table.Players[i].WantToStandUp = false
-			table.Players[i] = nil
-			table.Standers[p.Name] = p
+			t.Players[i].Playing = false
+			t.Players[i].Standing = true
+			t.Players[i].WantToStandUp = false
+			t.Players[i] = nil
+			t.Standers[p.Name] = p
 		}
 	}
 }
@@ -210,46 +220,51 @@ func (player *Player) StandUp() {
 	player.WantToStandUp = true
 }
 
-func (table *Table) standUp(player *Player) error {
-	table.mutex.Lock()
-	defer table.mutex.Unlock()
-	for i, p := range table.Players {
+func (t *Table) standUp(player *Player) error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	for i, p := range t.Players {
 		if p == player {
-			table.Players[i].Playing = false
-			table.Players[i].Standing = true
-			table.Players[i].WantToStandUp = false
-			table.Players[i] = nil
-			table.Standers[player.Name] = player
+			t.Players[i].Playing = false
+			t.Players[i].Standing = true
+			t.Players[i].WantToStandUp = false
+			t.Players[i] = nil
+			t.Standers[player.Name] = player
 			return nil
 		}
 	}
 	return errors.New("player is not sitting at this table")
 }
 
+// RoundDone gets whether the round is done
 func (t *Table) RoundDone() bool {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	return t.Hand.Round.RoundDone
 }
 
+// SetRoundDone sets whether the round is done
 func (t *Table) SetRoundDone(d bool) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	t.Hand.Round.RoundDone = d
 }
 
+// BettingDone gets whether betting is done
 func (t *Table) BettingDone() bool {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	return t.Hand.BettingDone
 }
 
+// CurrentBetter gets the current better
 func (t *Table) CurrentBetter() *Player {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	return t.Hand.Round.BetTurn.Value.(*Player)
 }
 
+// HandlePlayerAction handles a player's desired action
 func (t *Table) HandlePlayerAction(player *Player, action RoundAction) error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -276,28 +291,28 @@ func (player Player) String() string {
 }
 
 // String table's string
-func (table *Table) String() string {
-	out := fmt.Sprintf("bettingDone: %v, handDone: %v\n", table.Hand.BettingDone, table.Hand.HandDone)
-	if len(table.Hand.Board) > 0 {
+func (t *Table) String() string {
+	out := fmt.Sprintf("bettingDone: %v, handDone: %v\n", t.Hand.BettingDone, t.Hand.HandDone)
+	if len(t.Hand.Board) > 0 {
 		out += "Board="
-		for _, c := range table.Hand.Board {
+		for _, c := range t.Hand.Board {
 			out += fmt.Sprint(c) + " "
 		}
 		out += "\n"
 	}
-	for _, pot := range append(table.Hand.Pot.SidePots, table.Hand.Pot.MainPot) {
+	for _, pot := range append(t.Hand.Pot.SidePots, t.Hand.Pot.MainPot) {
 		if pot.Pot != 0 {
 			out += "Pot=" + fmt.Sprint(pot.Pot) +
 				", player_count=" + fmt.Sprint(len(pot.Players)) + "\n"
 		}
 	}
-	for i, p := range table.Players {
+	for i, p := range t.Players {
 		seat := "Seat: " + fmt.Sprint(i) + ", " + fmt.Sprint(p)
 		out += seat
-		if p == RingToPlayer(table.Hand.Round.BetTurn) {
+		if p == RingToPlayer(t.Hand.Round.BetTurn) {
 			out += " (B) "
 		}
-		if p == table.Hand.Dealer() {
+		if p == t.Hand.Dealer() {
 			out += " (D) "
 		}
 		out += "\n"
@@ -311,40 +326,40 @@ func (player *Player) GetTable() *Table {
 }
 
 // // Play rounds at the table
-// func (table *Table) Play() error {
-// 	if table.playing {
+// func (t *Table) Play() error {
+// 	if t.playing {
 // 		return errors.New("play: table already playing")
 // 	}
-// 	table.playing = true
+// 	t.playing = true
 // 	for {
-// 		table.Hand = table.NewHand()
-// 		log.Println("Dealing next hand, dealer is", RingToPlayer(table.Hand.Players).Name)
-// 		if err := table.Hand.StartHand(); err != nil {
-// 			table.playing = false
+// 		t.Hand = t.NewHand()
+// 		log.Println("Dealing next hand, dealer is", RingToPlayer(t.Hand.Players).Name)
+// 		if err := t.Hand.StartHand(); err != nil {
+// 			t.playing = false
 // 			return err
 // 		}
-// 		table.Hand.ListenForPlayerActions()
-// 		for !table.Hand.HandDone {
-// 			table.Hand.Deal()
-// 			table.Hand.ListenForPlayerActions()
-// 			if len(table.Hand.Board) == 5 {
-// 				table.Hand.HandDone = true
+// 		t.Hand.ListenForPlayerActions()
+// 		for !t.Hand.HandDone {
+// 			t.Hand.Deal()
+// 			t.Hand.ListenForPlayerActions()
+// 			if len(t.Hand.Board) == 5 {
+// 				t.Hand.HandDone = true
 // 			}
 // 		}
-// 		if err := table.Hand.FinishHand(); err != nil {
+// 		if err := t.Hand.FinishHand(); err != nil {
 // 			log.Println(err)
-// 			table.playing = false
+// 			t.playing = false
 // 			return err
 // 		}
-// 		time.Sleep(time.Second * table.TableConfig.secondsBetweenHands)
-// 		for _, p := range table.Players {
+// 		time.Sleep(time.Second * t.TableConfig.secondsBetweenHands)
+// 		for _, p := range t.Players {
 // 			if p != nil && p.WantToStandUp {
-// 				table.standUp(p)
+// 				t.standUp(p)
 // 			}
 // 		}
-// 		if err := table.incrementDealerIndex(); err != nil {
+// 		if err := t.incrementDealerIndex(); err != nil {
 // 			log.Println(err)
-// 			table.playing = false
+// 			t.playing = false
 // 			return err
 // 		}
 // 	}
