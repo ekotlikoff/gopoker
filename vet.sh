@@ -38,7 +38,7 @@ if [[ "$1" = "-install" ]]; then
     go install \
       golang.org/x/lint/golint \
       golang.org/x/tools/cmd/goimports \
-      honnef.co/go/tools/cmd/staticcheck \
+      honnef.co/go/tools/cmd/staticcheck@latest \
       github.com/client9/misspell/cmd/misspell
     popd
 
@@ -69,6 +69,6 @@ for MOD_FILE in $(find . -name 'go.mod'); do
 done
 
 SC_OUT="$(mktemp)"
-staticcheck -go 1.22 -checks 'inherit,-ST1015' ./... > "${SC_OUT}" || true
+staticcheck -checks 'inherit,-ST1015' ./... > "${SC_OUT}" || true
 # Error if anything other than deprecation warnings are printed.
 not grep -v "is deprecated:.*SA1019" "${SC_OUT}"

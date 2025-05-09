@@ -185,6 +185,7 @@ func (t *Table) Leave(p *Player) error {
 	defer t.mutex.Unlock()
 	if _, ok := t.Standers[p.Name]; ok {
 		delete(t.Standers, p.Name)
+		return nil
 	}
 	return errors.New("player is not standing at this table")
 }
@@ -219,22 +220,6 @@ func (t *Table) HandleStanders() {
 // StandUp a player at the next chance
 func (p *Player) StandUp() {
 	p.WantToStandUp = true
-}
-
-func (t *Table) standUp(p *Player) error {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	for i, player := range t.Players {
-		if p == player {
-			t.Players[i].Playing = false
-			t.Players[i].Standing = true
-			t.Players[i].WantToStandUp = false
-			t.Players[i] = nil
-			t.Standers[p.Name] = player
-			return nil
-		}
-	}
-	return errors.New("player is not sitting at this table")
 }
 
 // RoundDone gets whether the round is done
