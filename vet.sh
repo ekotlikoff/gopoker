@@ -36,10 +36,10 @@ if [[ "$1" = "-install" ]]; then
      # Install the pinned versions as defined in module tools.
     pushd ./test/tools
     go install \
-      golang.org/x/lint/golint \
-      golang.org/x/tools/cmd/goimports \
+      golang.org/x/lint/golint@latest \
+      golang.org/x/tools/cmd/goimports@latest \
       honnef.co/go/tools/cmd/staticcheck@latest \
-      github.com/client9/misspell/cmd/misspell
+      github.com/client9/misspell/cmd/misspell@latest
     popd
 
     if [[ "${TRAVIS}" = "true" ]]; then
