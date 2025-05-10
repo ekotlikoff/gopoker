@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chehsunliu/poker"
 	model "github.com/ekotlikoff/gopoker/internal/model/table"
 )
 
@@ -56,11 +55,11 @@ type (
 		// Channel for responses to requests from the client.
 		tableResponseChan chan TableActionResponse
 		// Channel for updates to the Table's state.
-		tableUpdateChan chan TableDetails
+		tableUpdateChan chan model.Table
 		// The player's current table if any
 		table *Table
 		// Only one client connected to the player at a time
-		clientMutex sync.Mutex
+		mutex sync.Mutex
 	}
 	// Table is an instance of an ongoing game the TableServer is hosting.
 	Table struct {
@@ -103,29 +102,6 @@ type (
 	RoundActionResponse struct {
 		success bool
 	}
-
-	// Opponent contains the details of a player needed by other players.
-	Opponent struct {
-		name    string
-		stack   int
-		bet     int
-		playing bool
-	}
-	// TableDetails has all the details of the table a client needs (other players, bet amounts, etc).
-	TableDetails struct {
-		players     []*Opponent
-		dealerIndex int
-		pot         int
-		playing     bool
-		standers    []*Opponent
-		myHole      []poker.Card
-		board       []poker.Card
-	}
-
-	// TableUpdate represents an update to the client unrelated to a specific bet.
-	TableUpdate struct {
-		TableDetails TableDetails
-	}
 )
 
 func defaultTableConfig() TableConfig {
@@ -143,7 +119,7 @@ func NewPlayer(name string) *Player {
 		requestChan:       make(chan model.RoundAction),
 		responseChan:      make(chan RoundActionResponse),
 		tableResponseChan: make(chan TableActionResponse),
-		tableUpdateChan:   make(chan TableDetails),
+		tableUpdateChan:   make(chan model.Table),
 	}
 }
 
@@ -268,6 +244,8 @@ func (p *Player) GetTableResponse() TableActionResponse {
 }
 
 func (p *Player) join(t *Table) error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	err := t.table.Join(p.playerModel)
