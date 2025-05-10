@@ -37,9 +37,9 @@ if [[ "$1" = "-install" ]]; then
     pushd ./test/tools
     go install \
       golang.org/x/lint/golint@latest \
-      golang.org/x/tools/cmd/goimports@latest \
-      honnef.co/go/tools/cmd/staticcheck@latest \
-      github.com/client9/misspell/cmd/misspell@latest
+      golang.org/x/tools/cmd/goimports@latest
+    go install honnef.co/go/tools/cmd/staticcheck@latest
+    go install github.com/client9/misspell/cmd/misspell@latest
     popd
 
     if [[ "${TRAVIS}" = "true" ]]; then
