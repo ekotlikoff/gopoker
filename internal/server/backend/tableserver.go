@@ -75,7 +75,7 @@ type (
 		players     map[string]*Player
 	}
 	// TableServer is the server that orchestrates one or more ongoing Tables.
-	tableServer struct {
+	TableServer struct {
 		tableServerConfig TableServerConfig
 		tables            map[string]*Table
 		tableActions      chan TableAction
@@ -96,7 +96,7 @@ type (
 
 	// TableActionResponse is a resposne to a client's TableAction.
 	TableActionResponse struct {
-		success bool
+		Success bool
 	}
 
 	// RoundActionResponse is a resposne to a client's RoundAction.
@@ -136,6 +136,7 @@ func defaultTableConfig() TableConfig {
 	}
 }
 
+// NewPlayer creates a new Player.
 func NewPlayer(name string) *Player {
 	return &Player{
 		playerModel:       model.NewPlayer(name),
@@ -146,8 +147,9 @@ func NewPlayer(name string) *Player {
 	}
 }
 
-func NewTableServer() *tableServer {
-	return &tableServer{
+// NewTableServer creates a new TableServer.
+func NewTableServer() *TableServer {
+	return &TableServer{
 		tableServerConfig: TableServerConfig{
 			maxConcurrentTables: 5,
 		},
@@ -156,12 +158,17 @@ func NewTableServer() *tableServer {
 	}
 }
 
+// SendTableAction sends the TableServer an action.
+func (ts *TableServer) SendTableAction(a TableAction) {
+	ts.tableActions <- a
+}
+
 // Stop stops the table server
-func (ts *tableServer) Stop() {
+func (ts *TableServer) Stop() {
 	close(ts.tableActions)
 }
 
-func (ts *tableServer) newTable(name string, config TableConfig, creator string) error {
+func (ts *TableServer) newTable(name string, config TableConfig, creator string) error {
 	ts.mutex.Lock()
 	defer ts.mutex.Unlock()
 	if len(ts.tables) >= ts.tableServerConfig.maxConcurrentTables {
@@ -179,6 +186,7 @@ func (ts *tableServer) newTable(name string, config TableConfig, creator string)
 	return nil
 }
 
+// JoinTableAction makes a Join action.
 func JoinTableAction(t string, p *Player) TableAction {
 	return TableAction{
 		tableActionType: Join,
@@ -187,6 +195,7 @@ func JoinTableAction(t string, p *Player) TableAction {
 	}
 }
 
+// CreateTableAction makes a Create action.
 func CreateTableAction(t string, p *Player) TableAction {
 	return TableAction{
 		tableActionType: Create,
@@ -197,7 +206,7 @@ func CreateTableAction(t string, p *Player) TableAction {
 }
 
 // Serve starts the table server
-func (ts *tableServer) Serve() {
+func (ts *TableServer) Serve() {
 	for tableAction := range ts.tableActions {
 		switch tableAction.tableActionType {
 		case Create:
@@ -206,7 +215,7 @@ func (ts *tableServer) Serve() {
 				tableAction.tableConfig,
 				tableAction.player.playerModel.Name,
 			)
-			tableAction.player.tableResponseChan <- TableActionResponse{success: err == nil}
+			tableAction.player.tableResponseChan <- TableActionResponse{err == nil}
 		case Stand:
 			ts.mutex.Lock()
 			tableAction.player.playerModel.StandUp()
@@ -217,7 +226,7 @@ func (ts *tableServer) Serve() {
 			p := tableAction.player
 			var table *Table
 			if table = ts.tables[tableAction.tableName]; table == nil {
-				p.tableResponseChan <- TableActionResponse{success: false}
+				p.tableResponseChan <- TableActionResponse{false}
 				continue
 			}
 			err := table.table.SitDown(
@@ -225,25 +234,24 @@ func (ts *tableServer) Serve() {
 			)
 			table.players[p.playerModel.Name] = p
 			ts.mutex.Unlock()
-			tableAction.player.tableResponseChan <- TableActionResponse{success: err == nil}
+			tableAction.player.tableResponseChan <- TableActionResponse{err == nil}
 		case Leave:
 			ts.mutex.Lock()
 			// TODO if leaver is admin, update admin.
 			err := tableAction.player.playerModel.Leave()
 			ts.mutex.Unlock()
-			tableAction.player.tableResponseChan <- TableActionResponse{success: err == nil}
+			tableAction.player.tableResponseChan <- TableActionResponse{err == nil}
 		case Join:
 			ts.mutex.Lock()
 			err := fmt.Errorf("table %q does not exist", tableAction.tableName)
 			for _, t := range ts.tables {
 				if t.name == tableAction.tableName {
 					err = tableAction.player.join(t)
-					println(err)
 					break
 				}
 			}
 			ts.mutex.Unlock()
-			tableAction.player.tableResponseChan <- TableActionResponse{success: err == nil}
+			tableAction.player.tableResponseChan <- TableActionResponse{err == nil}
 		case Start:
 			go ts.serveTable(ts.tables[tableAction.tableName])
 		case Pause:
@@ -252,6 +260,11 @@ func (ts *tableServer) Serve() {
 			ts.tables[tableAction.tableName].unpauseChan <- struct{}{}
 		}
 	}
+}
+
+// GetTableResponse gets a response from the table.
+func (p *Player) GetTableResponse() TableActionResponse {
+	return <-p.tableResponseChan
 }
 
 func (p *Player) join(t *Table) error {
@@ -289,7 +302,7 @@ func (t *Table) getTimeBetweenHands() time.Duration {
 	return t.tableConfig.timeBetweenHands
 }
 
-func (ts *tableServer) serveTable(t *Table) error {
+func (ts *TableServer) serveTable(t *Table) error {
 	if t.isPlaying() {
 		return errors.New("play: table already playing")
 	}

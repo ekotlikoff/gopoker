@@ -8,8 +8,8 @@ func TestCreateAndJoin(t *testing.T) {
 	go ts.Serve()
 	p1 := NewPlayer("1")
 	p2 := NewPlayer("2")
-	ts.tableActions <- CreateTableAction(tableName, p1)
-	if !(<-p1.tableResponseChan).success {
+	ts.SendTableAction(CreateTableAction(tableName, p1))
+	if !p1.GetTableResponse().Success {
 		t.Error("expected to create table successfully")
 	}
 	if _, ok := ts.tables[tableName]; !ok {
@@ -18,15 +18,15 @@ func TestCreateAndJoin(t *testing.T) {
 	if ts.tables[tableName].adminName != p1.playerModel.Name {
 		t.Error("expected creator to be admin")
 	}
-	ts.tableActions <- JoinTableAction(tableName, p1)
-	if !(<-p1.tableResponseChan).success {
+	ts.SendTableAction(JoinTableAction(tableName, p1))
+	if !p1.GetTableResponse().Success {
 		t.Error("expected to join table successfully")
 	}
 	if p1.table != ts.tables[tableName] {
 		t.Error("p1's table is not set after joining")
 	}
-	ts.tableActions <- JoinTableAction(tableName, p2)
-	if !(<-p2.tableResponseChan).success {
+	ts.SendTableAction(JoinTableAction(tableName, p2))
+	if !p2.GetTableResponse().Success {
 		t.Error("expected to join table successfully")
 	}
 	if p2.table != ts.tables[tableName] {
@@ -43,16 +43,16 @@ func TestJoinFakeTable(t *testing.T) {
 	go ts.Serve()
 	p1 := NewPlayer("1")
 	p2 := NewPlayer("2")
-	ts.tableActions <- CreateTableAction(tableName, p1)
-	if !(<-p1.tableResponseChan).success {
+	ts.SendTableAction(CreateTableAction(tableName, p1))
+	if !p1.GetTableResponse().Success {
 		t.Error("expected to create table successfully")
 	}
-	ts.tableActions <- JoinTableAction("fake table", p2)
-	if (<-p2.tableResponseChan).success {
+	ts.SendTableAction(JoinTableAction("fake table", p2))
+	if p2.GetTableResponse().Success {
 		t.Error("expected to fail to join table")
 	}
-	ts.tableActions <- JoinTableAction(tableName, p2)
-	if !(<-p2.tableResponseChan).success {
+	ts.SendTableAction(JoinTableAction(tableName, p2))
+	if !p2.GetTableResponse().Success {
 		t.Error("expected to join table successfully")
 	}
 }
