@@ -137,8 +137,7 @@ func (t *Table) StartHand() error {
 	return t.Hand.StartHand()
 }
 
-// IncrementDealerIndex increments the current dealer
-func (t *Table) IncrementDealerIndex() error {
+func (t *Table) incrementDealerIndex() error {
 	log.Printf("dealer index: %d\n", t.DealerIndex)
 	for i := 1; i < len(t.Players); i++ {
 		dealerIndex := (i + t.DealerIndex) % len(t.Players)
@@ -155,17 +154,22 @@ func (t *Table) IncrementDealerIndex() error {
 
 // Join stand a player at the table
 func (t *Table) Join(p *Player) error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
 	if _, ok := t.Standers[p.Name]; ok {
 		return errors.New("duplicate name")
 	} else if len(t.Players)+len(t.Standers) >= MaxTableSize+MaxStandersSize {
 		return fmt.Errorf("too many players %d", len(t.Players)+len(t.Standers))
 	}
 	t.Standers[p.Name] = p
+	p.table = t
 	return nil
 }
 
 // SitDown seat a player at the table
 func (t *Table) SitDown(p *Player, seat int) error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
 	if p.Funds < t.TableConfig.minBet {
 		return errors.New("Player has insufficient funds to sit")
 	} else if seat >= MaxTableSize {
@@ -185,6 +189,7 @@ func (t *Table) Leave(p *Player) error {
 	defer t.mutex.Unlock()
 	if _, ok := t.Standers[p.Name]; ok {
 		delete(t.Standers, p.Name)
+		p.table = nil
 		return nil
 	}
 	return errors.New("player is not standing at this table")

@@ -68,7 +68,7 @@ func (t *Table) NewHand() {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	if t.Players[t.DealerIndex] == nil {
-		t.IncrementDealerIndex()
+		t.incrementDealerIndex()
 	}
 	players, pot := t.playersForHand()
 	t.Hand = &Hand{
@@ -95,7 +95,7 @@ func (t *Table) FinishHand() error {
 			player.StandUp()
 		}
 	})
-	return t.IncrementDealerIndex()
+	return t.incrementDealerIndex()
 }
 
 // RingToPlayer converts from a ring buffer to a player

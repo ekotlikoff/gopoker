@@ -3,6 +3,7 @@ package chessserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -26,6 +27,8 @@ const (
 	Start = TableActionType(iota)
 	// Pause is a player's attempt to pause a table's play.
 	Pause = TableActionType(iota)
+	// Unpause is a player's attempt to unpause a table's play.
+	Unpause = TableActionType(iota)
 
 	defaultTimeToBet        = time.Second * 30
 	defaultTimeBetweenHands = time.Second * 5
@@ -36,8 +39,6 @@ type (
 	TableServerConfig struct {
 		maxConcurrentTables int
 	}
-	// TableGenerator generates TableConfigs.
-	TableGenerator func() TableConfig
 	// TableConfig defines the TableServer's opinion of how a given Table should be run.
 	TableConfig struct {
 		timeToBet        time.Duration
@@ -69,11 +70,12 @@ type (
 		mutex       sync.Mutex
 		table       *model.Table
 		playing     bool
-		paused      bool
+		pauseChan   chan struct{}
+		unpauseChan chan struct{}
 		players     map[string]*Player
 	}
 	// TableServer is the server that orchestrates one or more ongoing Tables.
-	TableServer struct {
+	tableServer struct {
 		tableServerConfig TableServerConfig
 		tables            map[string]*Table
 		tableActions      chan TableAction
@@ -126,8 +128,7 @@ type (
 	}
 )
 
-// DefaultTableGenerator generates a default table config
-func DefaultTableGenerator() TableConfig {
+func defaultTableConfig() TableConfig {
 	return TableConfig{
 		timeToBet:        defaultTimeToBet,
 		timeBetweenHands: defaultTimeBetweenHands,
@@ -135,13 +136,32 @@ func DefaultTableGenerator() TableConfig {
 	}
 }
 
-// StartTableServer starts the table server
-func (ts *TableServer) StartTableServer(quit chan bool) {
-	go ts.Serve()
+func NewPlayer(name string) *Player {
+	return &Player{
+		playerModel:       model.NewPlayer(name),
+		requestChan:       make(chan model.RoundAction),
+		responseChan:      make(chan RoundActionResponse),
+		tableResponseChan: make(chan TableActionResponse),
+		tableUpdateChan:   make(chan TableDetails),
+	}
 }
 
-// NewTable creates a new table on the server
-func (ts *TableServer) NewTable(name string, config model.TableConfig, creator string) error {
+func NewTableServer() *tableServer {
+	return &tableServer{
+		tableServerConfig: TableServerConfig{
+			maxConcurrentTables: 5,
+		},
+		tables:       make(map[string]*Table),
+		tableActions: make(chan TableAction),
+	}
+}
+
+// Stop stops the table server
+func (ts *tableServer) Stop() {
+	close(ts.tableActions)
+}
+
+func (ts *tableServer) newTable(name string, config TableConfig, creator string) error {
 	ts.mutex.Lock()
 	defer ts.mutex.Unlock()
 	if len(ts.tables) >= ts.tableServerConfig.maxConcurrentTables {
@@ -150,20 +170,40 @@ func (ts *TableServer) NewTable(name string, config model.TableConfig, creator s
 		return errors.New("duplicate name")
 	}
 	ts.tables[name] = &Table{
-		name: name, table: model.NewTableWithConfig(config), adminName: creator,
-		tableConfig: DefaultTableGenerator(),
+		name: name, table: model.NewTableWithConfig(config.modelConfig),
+		adminName: creator, tableConfig: config,
+		pauseChan:   make(chan struct{}),
+		unpauseChan: make(chan struct{}),
+		players:     make(map[string]*Player),
 	}
 	return nil
 }
 
-// Serve handles table actions
-func (ts *TableServer) Serve() {
+func JoinTableAction(t string, p *Player) TableAction {
+	return TableAction{
+		tableActionType: Join,
+		tableName:       t,
+		player:          p,
+	}
+}
+
+func CreateTableAction(t string, p *Player) TableAction {
+	return TableAction{
+		tableActionType: Create,
+		tableName:       t,
+		tableConfig:     defaultTableConfig(),
+		player:          p,
+	}
+}
+
+// Serve starts the table server
+func (ts *tableServer) Serve() {
 	for tableAction := range ts.tableActions {
 		switch tableAction.tableActionType {
 		case Create:
-			err := ts.NewTable(
+			err := ts.newTable(
 				tableAction.tableName,
-				tableAction.tableConfig.modelConfig,
+				tableAction.tableConfig,
 				tableAction.player.playerModel.Name,
 			)
 			tableAction.player.tableResponseChan <- TableActionResponse{success: err == nil}
@@ -174,9 +214,16 @@ func (ts *TableServer) Serve() {
 			tableAction.player.tableResponseChan <- TableActionResponse{true}
 		case Sit:
 			ts.mutex.Lock()
-			err := tableAction.player.playerModel.GetTable().SitDown(
+			p := tableAction.player
+			var table *Table
+			if table = ts.tables[tableAction.tableName]; table == nil {
+				p.tableResponseChan <- TableActionResponse{success: false}
+				continue
+			}
+			err := table.table.SitDown(
 				tableAction.player.playerModel, tableAction.seat,
 			)
+			table.players[p.playerModel.Name] = p
 			ts.mutex.Unlock()
 			tableAction.player.tableResponseChan <- TableActionResponse{success: err == nil}
 		case Leave:
@@ -187,25 +234,35 @@ func (ts *TableServer) Serve() {
 			tableAction.player.tableResponseChan <- TableActionResponse{success: err == nil}
 		case Join:
 			ts.mutex.Lock()
-			var err error
+			err := fmt.Errorf("table %q does not exist", tableAction.tableName)
 			for _, t := range ts.tables {
 				if t.name == tableAction.tableName {
-					err = t.table.Join(tableAction.player.playerModel)
+					err = tableAction.player.join(t)
+					println(err)
 					break
 				}
 			}
 			ts.mutex.Unlock()
 			tableAction.player.tableResponseChan <- TableActionResponse{success: err == nil}
 		case Start:
-			go ts.ServeTable(ts.tables[tableAction.tableName])
+			go ts.serveTable(ts.tables[tableAction.tableName])
 		case Pause:
-			ts.mutex.Lock()
-			ts.tables[tableAction.tableName].mutex.Lock()
-			ts.tables[tableAction.tableName].paused = true
-			ts.tables[tableAction.tableName].mutex.Unlock()
-			ts.mutex.Unlock()
+			ts.tables[tableAction.tableName].pauseChan <- struct{}{}
+		case Unpause:
+			ts.tables[tableAction.tableName].unpauseChan <- struct{}{}
 		}
 	}
+}
+
+func (p *Player) join(t *Table) error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	err := t.table.Join(p.playerModel)
+	if err == nil {
+		t.players[p.playerModel.Name] = p
+		p.table = t
+	}
+	return err
 }
 
 func (t *Table) isPlaying() bool {
@@ -232,35 +289,24 @@ func (t *Table) getTimeBetweenHands() time.Duration {
 	return t.tableConfig.timeBetweenHands
 }
 
-func (t *Table) incrementDealerIndex() error {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	if err := t.table.IncrementDealerIndex(); err != nil {
-		log.Println(err)
-		t.playing = false
-		return err
-	}
-	return nil
-}
-
-// ServeTable begins serving a table for play
-func (ts *TableServer) ServeTable(t *Table) error {
-	// TODO handle table paused
+func (ts *tableServer) serveTable(t *Table) error {
 	if t.isPlaying() {
 		return errors.New("play: table already playing")
 	}
 	t.setPlaying(true)
 	for {
+		t.handlePause()
 		t.table.NewHand()
 		log.Println("Dealing next hand, dealer is", t.table.Dealer())
 		if err := t.table.StartHand(); err != nil {
 			t.setPlaying(false)
 			return err
 		}
-		t.ListenForPlayerActions()
+		t.handlePause()
+		t.listenForPlayerActions()
 		for !t.table.HandDone() {
 			t.table.Deal()
-			t.ListenForPlayerActions()
+			t.listenForPlayerActions()
 			if len(t.table.Board()) == 5 {
 				t.table.SetHandDone(true)
 			}
@@ -272,14 +318,19 @@ func (ts *TableServer) ServeTable(t *Table) error {
 		}
 		time.Sleep(t.getTimeBetweenHands())
 		t.table.HandleStanders()
-		if err := t.incrementDealerIndex(); err != nil {
-			return err
-		}
 	}
 }
 
-// ListenForPlayerActions get each player's action for the round of bets
-func (t *Table) ListenForPlayerActions() {
+func (t *Table) handlePause() {
+	select {
+	case <-t.pauseChan:
+		<-t.unpauseChan
+	default:
+	}
+
+}
+
+func (t *Table) listenForPlayerActions() {
 	for !t.table.RoundDone() && !t.table.BettingDone() && !t.table.HandDone() {
 		success := false
 		player := t.table.CurrentBetter()
@@ -289,7 +340,7 @@ func (t *Table) ListenForPlayerActions() {
 			defer cancel()
 			n := time.Now()
 			client := t.players[player.Name]
-			err := t.table.HandlePlayerAction(player, getPlayerAction(ctx, client))
+			err := t.table.HandlePlayerAction(player, getPlayerAction(ctx, client, t))
 			timeRemaining -= time.Since(n)
 			if err == nil {
 				success = true
@@ -304,13 +355,22 @@ func (t *Table) ListenForPlayerActions() {
 	t.table.SetRoundDone(true)
 }
 
-func getPlayerAction(ctx context.Context, player *Player) model.RoundAction {
+func getPlayerAction(ctx context.Context, player *Player, t *Table) model.RoundAction {
 	log.Println("Waiting for action from", player.playerModel.Name)
 	action := model.RoundAction{ActionType: model.Fold}
-	select {
-	case action = <-player.requestChan:
-	case <-ctx.Done():
-		log.Println(player.playerModel.Name, "timed out, folding")
+	for {
+		select {
+		case <-t.pauseChan:
+			deadline, _ := ctx.Deadline()
+			<-t.unpauseChan
+			var cancel func()
+			ctx, cancel = context.WithTimeout(context.Background(), time.Until(deadline))
+			defer cancel()
+		case action = <-player.requestChan:
+			return action
+		case <-ctx.Done():
+			log.Println(player.playerModel.Name, "timed out, folding")
+			return action
+		}
 	}
-	return action
 }
