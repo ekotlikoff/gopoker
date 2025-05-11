@@ -149,12 +149,25 @@ func (hand *Hand) Dealer() *Player {
 
 // SmallBlind is the small blind of the hand
 func (hand *Hand) SmallBlind() *Player {
+	// Small blind is always to the left of the dealer, except during heads-up play.
+	if hand.Players.Len() == 2 {
+		return RingToPlayer(hand.Players)
+	}
 	return RingToPlayer(hand.Players.Next())
 }
 
 // BigBlind is the big blind of the hand
+func (hand *Hand) bigBlindRing() *ring.Ring {
+	// Big blind is always two from the dealer, except during heads-up play.
+	if hand.Players.Len() == 2 {
+		return hand.Players.Next()
+	}
+	return hand.Players.Next().Next()
+}
+
+// BigBlind is the big blind of the hand
 func (hand *Hand) BigBlind() *Player {
-	return RingToPlayer(hand.Players.Next().Next())
+	return RingToPlayer(hand.bigBlindRing())
 }
 
 func (hand *Hand) takeBlinds() {
@@ -184,7 +197,8 @@ func (hand *Hand) startBets() {
 	if len(hand.Board) == 0 {
 		hand.Round.CurrentBet = hand.TableConfig.minBet
 		hand.takeBlinds()
-		hand.Round.BetTurn = hand.Players.Next().Next()
+		// Play always starts left of the big blind.
+		hand.Round.BetTurn = hand.bigBlindRing()
 	} else {
 		hand.Round.CurrentBet = 0
 		hand.Round.BetTurn = hand.Players

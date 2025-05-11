@@ -209,9 +209,10 @@ func (t *Table) GetPlayers() [MaxTableSize]*Player {
 }
 
 // HandleStanders stands up players that want to stand
-func (t *Table) HandleStanders() {
+func (t *Table) HandleStanders() []string {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
+	newStanders := []string{}
 	for i, p := range t.Players {
 		if p != nil && p.WantToStandUp {
 			t.Players[i].Playing = false
@@ -219,8 +220,10 @@ func (t *Table) HandleStanders() {
 			t.Players[i].WantToStandUp = false
 			t.Players[i] = nil
 			t.Standers[p.Name] = p
+			newStanders = append(newStanders, p.Name)
 		}
 	}
+	return newStanders
 }
 
 // StandUp a player at the next chance

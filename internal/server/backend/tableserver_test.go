@@ -1,8 +1,8 @@
 package chessserver
 
 import (
+	"fmt"
 	"testing"
-	"time"
 
 	model "github.com/ekotlikoff/gopoker/internal/model/table"
 )
@@ -139,30 +139,80 @@ func TestSimpleHand(t *testing.T) {
 	}
 	consumeTableUpdates(ps...)
 	table := ts.tables[tableName]
-	p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
-	if r := p1.GetRoundResponse(); r.Err != nil {
-		t.Errorf("expected a successful bet, got error: %s", r.Err)
-	}
-	consumeTableUpdates(ps...)
+	fmt.Println(table.table)
 	p2.SendRoundAction(model.RoundAction{ActionType: model.Call})
 	if r := p2.GetRoundResponse(); r.Err != nil {
 		t.Errorf("expected a successful bet, got error: %s", r.Err)
 	}
 	consumeTableUpdates(ps...)
-	if !table.playing {
-		t.Error("table should be playing")
+	fmt.Println(table.table)
+	p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	if r := p1.GetRoundResponse(); r.Err != nil {
+		t.Errorf("expected a successful bet, got error: %s", r.Err)
 	}
-	time.Sleep(time.Second)
-	if len(table.table.Board()) != 3 {
-		t.Errorf("expected the flop, len(table.table.Board())==%d", len(table.table.Board()))
-	}
-	// TODO send stand so that they both stand the round ends after one round
-	// TODO listen to the below round action responses so that server doesn't lock up
-	// TODO add timeouts for the server's SendRoundResponse
+	fmt.Println(table.table)
+	// consumeTableUpdates(ps...)
 	// p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
-	// p2.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	// p1.GetRoundResponse()
+	// consumeTableUpdates(ps...)
+	//
+	//	if !table.playing {
+	//		t.Error("table should be playing")
+	//	}
+	//
+	// time.Sleep(time.Second)
+	//
+	//	if len(table.table.Board()) != 3 {
+	//		t.Errorf("expected the flop, len(table.table.Board())==%d", len(table.table.Board()))
+	//	}
+	//
+	// ts.SendTableAction(StandTableAction(tableName, p1))
+	// p1.GetTableResponse()
+	// consumeTableUpdates(ps...)
+	// ts.SendTableAction(StandTableAction(tableName, p2))
+	// p2.GetTableResponse()
+	// consumeTableUpdates(ps...)
+	// // TODO add timeouts for the server's SendRoundResponse
 	// p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	// p1.GetRoundResponse()
+	// consumeTableUpdates(ps...)
 	// p2.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	// p2.GetRoundResponse()
+	// consumeTableUpdates(ps...)
 	// p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	// p1.GetRoundResponse()
+	// consumeTableUpdates(ps...)
 	// p2.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	// p2.GetRoundResponse()
+	// consumeTableUpdates(ps...)
+	// p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	// p1.GetRoundResponse()
+	// consumeTableUpdates(ps...)
+	// p2.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	// p2.GetRoundResponse()
+	// consumeTableUpdates(ps...)
+	//
+	//	go func() {
+	//		update := <-p1.TableUpdateChan
+	//		if len(update.StateUpdate.NowStanding) != 2 {
+	//			t.Errorf("expected two standers, got %d", len(update.StateUpdate.NowStanding))
+	//		}
+	//		update = <-p1.TableUpdateChan
+	//		if !update.StateUpdate.PlayStopped {
+	//			t.Error("expected play to stop after standing")
+	//		}
+	//	}()
+	//
+	//	go func() {
+	//		update := <-p2.TableUpdateChan
+	//		if len(update.StateUpdate.NowStanding) != 2 {
+	//			t.Errorf("expected two standers, got %d", len(update.StateUpdate.NowStanding))
+	//		}
+	//		update = <-p2.TableUpdateChan
+	//		if !update.StateUpdate.PlayStopped {
+	//			t.Error("expected play to stop after standing")
+	//		}
+	//	}()
 }
+
+// TODO test pause

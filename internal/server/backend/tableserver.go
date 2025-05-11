@@ -43,6 +43,8 @@ const (
 	RoundUpdateT = PlayerUpdateType(iota)
 	// TableUpdateT is a table action e.g. a pause, somewhat standing up, etc.
 	TableUpdateT = PlayerUpdateType(iota)
+	// StateUpdateT is an update to table state - table no longer playing, etc.
+	StateUpdateT = PlayerUpdateType(iota)
 )
 
 type (
@@ -56,6 +58,14 @@ type (
 		timeBetweenHands time.Duration
 		modelConfig      model.TableConfig
 	}
+	// StateUpdate is an update to the table's state, for things that don't happen immediately or based
+	// on a clear user action.
+	// For example: folks looking to stand start standing after a hand, the table stops playing due to
+	// too few players
+	StateUpdate struct {
+		PlayStopped bool
+		NowStanding []string
+	}
 	// PlayerUpdateType is the type of table update sent to a client.
 	PlayerUpdateType int
 	// PlayerUpdate includes the various kinds of updates sent to a client.
@@ -68,6 +78,8 @@ type (
 		RoundAction model.RoundAction
 		// TableAction is a table action that may be relevant to a client.
 		TableAction TableAction
+		// StateUpdate is an update to the table's state
+		StateUpdate StateUpdate
 	}
 	// Player is a struct representing a client, containing channels for communications
 	// between the client and the the TableServer.
@@ -203,6 +215,15 @@ func SitTableAction(t string, p *Player, s int) TableAction {
 		tableName:       t,
 		player:          p,
 		seat:            s,
+	}
+}
+
+// StandTableAction makes a Stand action.
+func StandTableAction(t string, p *Player) TableAction {
+	return TableAction{
+		tableActionType: Stand,
+		tableName:       t,
+		player:          p,
 	}
 }
 
@@ -385,6 +406,7 @@ func (ts *TableServer) serveTable(t *Table) error {
 		t.handlePause()
 		t.table.NewHand()
 		if err := t.table.StartHand(); err != nil {
+			t.sendPlayerUpdates(newStateUpdate(true, nil))
 			t.setPlaying(false)
 			log.Print(err)
 			return err
@@ -392,19 +414,23 @@ func (ts *TableServer) serveTable(t *Table) error {
 		t.handlePause()
 		t.listenForPlayerActions()
 		for !t.table.HandDone() {
+			// TODO send deal update
 			t.table.Deal()
+			// TODO send waiting for bet
 			t.listenForPlayerActions()
 			if len(t.table.Board()) == 5 {
 				t.table.SetHandDone(true)
 			}
 		}
+		// TODO send player update for who the winner(s) were and their winnings
 		if err := t.table.FinishHand(); err != nil {
 			t.setPlaying(false)
 			log.Println(err)
 			return err
 		}
 		time.Sleep(t.getTimeBetweenHands())
-		t.table.HandleStanders()
+		t.sendPlayerUpdates(newStateUpdate(false, t.table.HandleStanders()))
+
 	}
 }
 
@@ -415,6 +441,16 @@ func (t *Table) handlePause() {
 	default:
 	}
 
+}
+
+func newStateUpdate(playStopped bool, nowStanding []string) *PlayerUpdate {
+	return &PlayerUpdate{
+		Type: StateUpdateT,
+		StateUpdate: StateUpdate{
+			PlayStopped: playStopped,
+			NowStanding: nowStanding,
+		},
+	}
 }
 
 func newTableUpdate(a TableAction) *PlayerUpdate {
