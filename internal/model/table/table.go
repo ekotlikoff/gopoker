@@ -122,6 +122,9 @@ func (t *Table) playersForHand() (*ring.Ring, Pot) {
 		}
 		index = (index + 1) % len(t.Players)
 	}
+	if len(playersPlaying) == 0 {
+		return nil, Pot{}
+	}
 	out := ring.New(len(playersPlaying))
 	for _, p := range playersPlaying {
 		out.Value = p
@@ -141,7 +144,6 @@ func (t *Table) incrementDealerIndex() error {
 	log.Printf("dealer index: %d\n", t.DealerIndex)
 	for i := 1; i < len(t.Players); i++ {
 		dealerIndex := (i + t.DealerIndex) % len(t.Players)
-		log.Println("index", dealerIndex)
 		p := t.Players[dealerIndex]
 		if p != nil && p.Playing && i != t.DealerIndex {
 			log.Printf("found player: %s, index: %d", p.Name, dealerIndex)
@@ -157,7 +159,7 @@ func (t *Table) Join(p *Player) error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	if _, ok := t.Standers[p.Name]; ok {
-		return errors.New("duplicate name")
+		return fmt.Errorf("duplicate name: %s", p.Name)
 	} else if len(t.Players)+len(t.Standers) >= MaxTableSize+MaxStandersSize {
 		return fmt.Errorf("too many players %d", len(t.Players)+len(t.Standers))
 	}
@@ -171,16 +173,15 @@ func (t *Table) SitDown(p *Player, seat int) error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	if p.Funds < t.TableConfig.minBet {
-		return errors.New("Player has insufficient funds to sit")
+		return fmt.Errorf("Player has insufficient funds to sit (%d < %d)", p.Funds, t.TableConfig.minBet)
 	} else if seat >= MaxTableSize {
 		return errors.New("Seat, " + fmt.Sprint(seat) +
 			" is greater than max table size, " + fmt.Sprint(MaxTableSize))
 	} else if t.Players[seat] == nil {
 		t.Players[seat] = p
 		return nil
-	} else {
-		return errors.New("seat is occupied, " + fmt.Sprint(seat))
 	}
+	return errors.New("seat is occupied, " + fmt.Sprint(seat))
 }
 
 // Leave removes a stander at the table

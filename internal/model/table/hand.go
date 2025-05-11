@@ -106,9 +106,10 @@ func RingToPlayer(ring *ring.Ring) *Player {
 // StartHand start a hand
 func (hand *Hand) StartHand() error {
 	if hand.Players.Len() < MinPlayersToPlay {
-		return errors.New("starthand: insufficient players to start hand")
+		return fmt.Errorf("starthand: insufficient players (%d) to start hand", hand.Players.Len())
 	}
 	hand.HandDone = false
+	log.Println("Dealing next hand, dealer is", hand.Dealer())
 	hand.Deck.Shuffle()
 	player := hand.Players
 	for i := 0; i < hand.Players.Len(); i++ {

@@ -33,6 +33,16 @@ const (
 	defaultTimeBetweenHands = time.Second * 5
 )
 
+// Various types of updates that can be sent to a client.
+const (
+	// FullUpdateT is the full update including the entire table's state.
+	FullUpdateT = TableUpdateType(iota)
+	// RoundUpdateT is the most recent RoundAction made by an opponent.
+	RoundUpdateT = TableUpdateType(iota)
+	// TableUpdateT is a table action e.g. a pause, somewhat standing up, etc.
+	TableUpdateT = TableUpdateType(iota)
+)
+
 type (
 	// TableServerConfig defines the TableServer's behavior.
 	TableServerConfig struct {
@@ -43,6 +53,19 @@ type (
 		timeToBet        time.Duration
 		timeBetweenHands time.Duration
 		modelConfig      model.TableConfig
+	}
+	// TableUpdateType is the type of table update sent to a client.
+	TableUpdateType int
+	// TableUpdate includes the various kinds of updates sent to a client.
+	TableUpdate struct {
+		// Type is the type of the update.
+		Type TableUpdateType
+		// Table is the full model.Table.
+		Table model.Table
+		// Action is the round action for the current better.
+		Action model.RoundAction
+		// TableAction is a table action that may be relevant to a client.
+		TableAction TableAction
 	}
 	// Player is a struct representing a client, containing channels for communications
 	// between the client and the the TableServer.
@@ -95,12 +118,12 @@ type (
 
 	// TableActionResponse is a resposne to a client's TableAction.
 	TableActionResponse struct {
-		Success bool
+		Err error
 	}
 
 	// RoundActionResponse is a resposne to a client's RoundAction.
 	RoundActionResponse struct {
-		success bool
+		Err error
 	}
 )
 
@@ -171,12 +194,31 @@ func JoinTableAction(t string, p *Player) TableAction {
 	}
 }
 
+// SitTableAction makes a Sit action.
+func SitTableAction(t string, p *Player, s int) TableAction {
+	return TableAction{
+		tableActionType: Sit,
+		tableName:       t,
+		player:          p,
+		seat:            s,
+	}
+}
+
 // CreateTableAction makes a Create action.
 func CreateTableAction(t string, p *Player) TableAction {
 	return TableAction{
 		tableActionType: Create,
 		tableName:       t,
 		tableConfig:     defaultTableConfig(),
+		player:          p,
+	}
+}
+
+// StartTableAction starts the table.
+func StartTableAction(t string, p *Player) TableAction {
+	return TableAction{
+		tableActionType: Start,
+		tableName:       t,
 		player:          p,
 	}
 }
@@ -191,32 +233,41 @@ func (ts *TableServer) Serve() {
 				tableAction.tableConfig,
 				tableAction.player.playerModel.Name,
 			)
-			tableAction.player.tableResponseChan <- TableActionResponse{err == nil}
+			tableAction.player.tableResponseChan <- TableActionResponse{err}
 		case Stand:
 			ts.mutex.Lock()
 			tableAction.player.playerModel.StandUp()
+			// TODO send TableUpdate
 			ts.mutex.Unlock()
-			tableAction.player.tableResponseChan <- TableActionResponse{true}
+			tableAction.player.tableResponseChan <- TableActionResponse{}
 		case Sit:
 			ts.mutex.Lock()
 			p := tableAction.player
 			var table *Table
 			if table = ts.tables[tableAction.tableName]; table == nil {
-				p.tableResponseChan <- TableActionResponse{false}
+				p.tableResponseChan <- TableActionResponse{
+					fmt.Errorf("no table %q", tableAction.tableName),
+				}
 				continue
 			}
 			err := table.table.SitDown(
 				tableAction.player.playerModel, tableAction.seat,
 			)
-			table.players[p.playerModel.Name] = p
+			if err == nil {
+				// TODO send TableUpdate
+				table.players[p.playerModel.Name] = p
+			}
 			ts.mutex.Unlock()
-			tableAction.player.tableResponseChan <- TableActionResponse{err == nil}
+			tableAction.player.tableResponseChan <- TableActionResponse{err}
 		case Leave:
 			ts.mutex.Lock()
 			// TODO if leaver is admin, update admin.
 			err := tableAction.player.playerModel.Leave()
+			if err == nil {
+				// TODO send TableUpdate
+			}
 			ts.mutex.Unlock()
-			tableAction.player.tableResponseChan <- TableActionResponse{err == nil}
+			tableAction.player.tableResponseChan <- TableActionResponse{err}
 		case Join:
 			ts.mutex.Lock()
 			err := fmt.Errorf("table %q does not exist", tableAction.tableName)
@@ -226,21 +277,38 @@ func (ts *TableServer) Serve() {
 					break
 				}
 			}
+			if err == nil {
+				// TODO send TableUpdate
+			}
 			ts.mutex.Unlock()
-			tableAction.player.tableResponseChan <- TableActionResponse{err == nil}
+			tableAction.player.tableResponseChan <- TableActionResponse{err}
 		case Start:
-			go ts.serveTable(ts.tables[tableAction.tableName])
+			err := ts.start(tableAction)
+			tableAction.player.tableResponseChan <- TableActionResponse{err}
 		case Pause:
+			// TODO send TableUpdate
 			ts.tables[tableAction.tableName].pauseChan <- struct{}{}
 		case Unpause:
+			// TODO send TableUpdate
 			ts.tables[tableAction.tableName].unpauseChan <- struct{}{}
 		}
+		// TODO add a new Refresh TableAction for someone that needs to re-sync after browser refresh?
 	}
 }
 
 // GetTableResponse gets a response from the table.
 func (p *Player) GetTableResponse() TableActionResponse {
 	return <-p.tableResponseChan
+}
+
+// SendRoundAction sends a round action to the server.
+func (p *Player) SendRoundAction(a model.RoundAction) {
+	p.requestChan <- a
+}
+
+// GetRoundResponse gets a response from the table.
+func (p *Player) GetRoundResponse() RoundActionResponse {
+	return <-p.responseChan
 }
 
 func (p *Player) join(t *Table) error {
@@ -280,6 +348,20 @@ func (t *Table) getTimeBetweenHands() time.Duration {
 	return t.tableConfig.timeBetweenHands
 }
 
+func (ts *TableServer) start(a TableAction) error {
+	ts.mutex.Lock()
+	table, ok := ts.tables[a.tableName]
+	ts.mutex.Unlock()
+	if !ok {
+		return fmt.Errorf("no such table %q", a.tableName)
+	} else if a.player.playerModel.Name != table.adminName {
+		return fmt.Errorf("%s is not the admin, %s is", a.player.playerModel.Name, table.adminName)
+	}
+	// TODO send TableUpdate
+	go ts.serveTable(table)
+	return nil
+}
+
 func (ts *TableServer) serveTable(t *Table) error {
 	if t.isPlaying() {
 		return errors.New("play: table already playing")
@@ -288,9 +370,9 @@ func (ts *TableServer) serveTable(t *Table) error {
 	for {
 		t.handlePause()
 		t.table.NewHand()
-		log.Println("Dealing next hand, dealer is", t.table.Dealer())
 		if err := t.table.StartHand(); err != nil {
 			t.setPlaying(false)
+			log.Print(err)
 			return err
 		}
 		t.handlePause()
@@ -334,11 +416,12 @@ func (t *Table) listenForPlayerActions() {
 			err := t.table.HandlePlayerAction(player, getPlayerAction(ctx, client, t))
 			timeRemaining -= time.Since(n)
 			if err == nil {
+				// TODO Send RoundUpdateT
 				success = true
 			} else {
 				log.Println(err)
 			}
-			client.responseChan <- RoundActionResponse{err == nil}
+			client.responseChan <- RoundActionResponse{err}
 		}
 		log.Println(player.Name, "made their bet")
 	}

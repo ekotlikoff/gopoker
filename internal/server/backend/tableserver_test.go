@@ -1,6 +1,11 @@
 package chessserver
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	model "github.com/ekotlikoff/gopoker/internal/model/table"
+)
 
 func TestCreateAndJoin(t *testing.T) {
 	tableName := "test table"
@@ -9,7 +14,7 @@ func TestCreateAndJoin(t *testing.T) {
 	p1 := NewPlayer("1")
 	p2 := NewPlayer("2")
 	ts.SendTableAction(CreateTableAction(tableName, p1))
-	if !p1.GetTableResponse().Success {
+	if p1.GetTableResponse().Err != nil {
 		t.Error("expected to create table successfully")
 	}
 	if _, ok := ts.tables[tableName]; !ok {
@@ -19,14 +24,14 @@ func TestCreateAndJoin(t *testing.T) {
 		t.Error("expected creator to be admin")
 	}
 	ts.SendTableAction(JoinTableAction(tableName, p1))
-	if !p1.GetTableResponse().Success {
+	if p1.GetTableResponse().Err != nil {
 		t.Error("expected to join table successfully")
 	}
 	if p1.table != ts.tables[tableName] {
 		t.Error("p1's table is not set after joining")
 	}
 	ts.SendTableAction(JoinTableAction(tableName, p2))
-	if !p2.GetTableResponse().Success {
+	if p2.GetTableResponse().Err != nil {
 		t.Error("expected to join table successfully")
 	}
 	if p2.table != ts.tables[tableName] {
@@ -44,15 +49,106 @@ func TestJoinFakeTable(t *testing.T) {
 	p1 := NewPlayer("1")
 	p2 := NewPlayer("2")
 	ts.SendTableAction(CreateTableAction(tableName, p1))
-	if !p1.GetTableResponse().Success {
+	if p1.GetTableResponse().Err != nil {
 		t.Error("expected to create table successfully")
 	}
 	ts.SendTableAction(JoinTableAction("fake table", p2))
-	if p2.GetTableResponse().Success {
+	if p2.GetTableResponse().Err == nil {
 		t.Error("expected to fail to join table")
 	}
 	ts.SendTableAction(JoinTableAction(tableName, p2))
-	if !p2.GetTableResponse().Success {
+	if p2.GetTableResponse().Err != nil {
 		t.Error("expected to join table successfully")
 	}
+}
+
+func TestSit(t *testing.T) {
+	tableName := "test table"
+	ts := NewTableServer()
+	go ts.Serve()
+	p1 := NewPlayer("1")
+	p2 := NewPlayer("2")
+	p1.playerModel.Funds = 1000
+	p2.playerModel.Funds = 1000
+	ts.SendTableAction(CreateTableAction(tableName, p1))
+	p1.GetTableResponse()
+	ts.SendTableAction(JoinTableAction(tableName, p2))
+	p2.GetTableResponse()
+	p1Seat := 0
+	ts.SendTableAction(SitTableAction(tableName, p1, p1Seat))
+	if err := p1.GetTableResponse().Err; err != nil {
+		t.Errorf("expected to sit at table successfully, failed with error: %s", err)
+	}
+	seat := 99
+	ts.SendTableAction(SitTableAction(tableName, p2, seat))
+	if p2.GetTableResponse().Err == nil {
+		t.Errorf("expected not to sit at seat %d successfully", seat)
+	}
+	ts.SendTableAction(SitTableAction(tableName, p2, p1Seat))
+	if p2.GetTableResponse().Err == nil {
+		t.Errorf("expected not to sit at seat %d successfully", seat)
+	}
+	ts.SendTableAction(SitTableAction(tableName, p2, 3))
+	if err := p2.GetTableResponse().Err; err != nil {
+		t.Errorf("expected to sit successfully, failed with error: %s", err)
+	}
+}
+
+func createTableWithTwoPlayers(tableName string) (*TableServer, *Player, *Player) {
+	ts := NewTableServer()
+	go ts.Serve()
+	p1 := NewPlayer("1")
+	p2 := NewPlayer("2")
+	p1.playerModel.Funds = 1000
+	p2.playerModel.Funds = 1000
+	ts.SendTableAction(CreateTableAction(tableName, p1))
+	p1.GetTableResponse()
+	ts.SendTableAction(JoinTableAction(tableName, p1))
+	p1.GetTableResponse()
+	ts.SendTableAction(JoinTableAction(tableName, p2))
+	p2.GetTableResponse()
+	ts.SendTableAction(SitTableAction(tableName, p1, 1))
+	p1.GetTableResponse()
+	ts.SendTableAction(SitTableAction(tableName, p2, 3))
+	p2.GetTableResponse()
+	return ts, p1, p2
+}
+
+func TestSimpleHand(t *testing.T) {
+	tableName := "test table"
+	ts, p1, p2 := createTableWithTwoPlayers(tableName)
+	ts.SendTableAction(StartTableAction(tableName, p2))
+	if r := p2.GetTableResponse(); r.Err == nil {
+		t.Error("only the admin should be able to start the table")
+	}
+	ts.SendTableAction(StartTableAction(tableName, p1))
+	if r := p1.GetTableResponse(); r.Err != nil {
+		t.Error("the admin should be able to start the table")
+	}
+	table := ts.tables[tableName]
+	p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	if r := p1.GetRoundResponse(); r.Err != nil {
+		t.Errorf("expected a successful bet, got error: %s", r.Err)
+	}
+	p2.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	if r := p2.GetRoundResponse(); r.Err != nil {
+		t.Errorf("expected a successful bet, got error: %s", r.Err)
+	}
+	if !table.playing {
+		t.Error("table should be playing")
+	}
+	// TODO make the below better by listening for RoundUpdateT
+	time.Sleep(time.Second)
+	if len(table.table.Board()) != 3 {
+		t.Errorf("expected the flop, len(table.table.Board())==%d", len(table.table.Board()))
+	}
+	// TODO send stand so that they both stand the round ends after one round
+	// TODO listen to the below round action responses so that server doesn't lock up
+	// TODO add timeouts for the server's SendRoundResponse
+	// p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	// p2.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	// p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	// p2.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	// p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	// p2.SendRoundAction(model.RoundAction{ActionType: model.Call})
 }
