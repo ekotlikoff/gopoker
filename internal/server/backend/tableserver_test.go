@@ -94,22 +94,33 @@ func TestSit(t *testing.T) {
 	}
 }
 
+func consumeTableUpdates(ps ...*Player) {
+	for _, p := range ps {
+		<-p.TableUpdateChan
+	}
+}
+
 func createTableWithTwoPlayers(tableName string) (*TableServer, *Player, *Player) {
 	ts := NewTableServer()
 	go ts.Serve()
 	p1 := NewPlayer("1")
 	p2 := NewPlayer("2")
+	ps := []*Player{p1, p2}
 	p1.playerModel.Funds = 1000
 	p2.playerModel.Funds = 1000
 	ts.SendTableAction(CreateTableAction(tableName, p1))
 	p1.GetTableResponse()
 	ts.SendTableAction(JoinTableAction(tableName, p1))
+	consumeTableUpdates(p1)
 	p1.GetTableResponse()
 	ts.SendTableAction(JoinTableAction(tableName, p2))
+	consumeTableUpdates(ps...)
 	p2.GetTableResponse()
 	ts.SendTableAction(SitTableAction(tableName, p1, 1))
+	consumeTableUpdates(ps...)
 	p1.GetTableResponse()
 	ts.SendTableAction(SitTableAction(tableName, p2, 3))
+	consumeTableUpdates(ps...)
 	p2.GetTableResponse()
 	return ts, p1, p2
 }
@@ -117,6 +128,7 @@ func createTableWithTwoPlayers(tableName string) (*TableServer, *Player, *Player
 func TestSimpleHand(t *testing.T) {
 	tableName := "test table"
 	ts, p1, p2 := createTableWithTwoPlayers(tableName)
+	ps := []*Player{p1, p2}
 	ts.SendTableAction(StartTableAction(tableName, p2))
 	if r := p2.GetTableResponse(); r.Err == nil {
 		t.Error("only the admin should be able to start the table")
@@ -125,19 +137,21 @@ func TestSimpleHand(t *testing.T) {
 	if r := p1.GetTableResponse(); r.Err != nil {
 		t.Error("the admin should be able to start the table")
 	}
+	consumeTableUpdates(ps...)
 	table := ts.tables[tableName]
 	p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
 	if r := p1.GetRoundResponse(); r.Err != nil {
 		t.Errorf("expected a successful bet, got error: %s", r.Err)
 	}
+	consumeTableUpdates(ps...)
 	p2.SendRoundAction(model.RoundAction{ActionType: model.Call})
 	if r := p2.GetRoundResponse(); r.Err != nil {
 		t.Errorf("expected a successful bet, got error: %s", r.Err)
 	}
+	consumeTableUpdates(ps...)
 	if !table.playing {
 		t.Error("table should be playing")
 	}
-	// TODO make the below better by listening for RoundUpdateT
 	time.Sleep(time.Second)
 	if len(table.table.Board()) != 3 {
 		t.Errorf("expected the flop, len(table.table.Board())==%d", len(table.table.Board()))
