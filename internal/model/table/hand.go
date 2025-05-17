@@ -53,6 +53,12 @@ type (
 		RoundDone bool
 	}
 
+	// Winner is a winner of a hand including their winnings.
+	Winner struct {
+		Player   Player
+		Winnings int
+	}
+
 	// ActionType an action a player can take during their turn in a round.
 	ActionType int
 
@@ -80,12 +86,12 @@ func (t *Table) NewHand() {
 }
 
 // FinishHand ends a hand and handles standing players up
-func (t *Table) FinishHand() error {
+func (t *Table) FinishHand() (error, []Winner) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	err := t.Hand.FinishHand()
+	err, winners := t.Hand.FinishHand()
 	if err != nil {
-		return err
+		return err, nil
 	}
 	// Clear player holes and handle standups
 	t.Hand.Players.Do(func(p interface{}) {
@@ -95,7 +101,7 @@ func (t *Table) FinishHand() error {
 			player.StandUp()
 		}
 	})
-	return t.incrementDealerIndex()
+	return t.incrementDealerIndex(), winners
 }
 
 // RingToPlayer converts from a ring buffer to a player
@@ -362,18 +368,18 @@ func (hand *Hand) Deal() error {
 
 // FinishHand is called when all betting is complete and the pot should be
 // distributed.
-func (hand *Hand) FinishHand() error {
+func (hand *Hand) FinishHand() (error, []Winner) {
 	if hand.Round == nil {
-		return errors.New("finishhand: there is no round")
+		return errors.New("finishhand: there is no round"), nil
 	} else if !hand.Round.RoundDone || !hand.HandDone {
-		return errors.New("finishhand: table is currently betting")
+		return errors.New("finishhand: table is currently betting"), nil
 	}
 	log.Println("Distributing pots")
 	playerRanking := hand.getPlayerRanking()
-	hand.distributePots(playerRanking)
+	winners := hand.distributePots(playerRanking)
 	// Clear board
 	hand.Board = []poker.Card{}
-	return nil
+	return nil, winners
 }
 
 func (hand *Hand) dealHole(player *Player) {

@@ -126,6 +126,7 @@ func createTableWithTwoPlayers(tableName string) (*TableServer, *Player, *Player
 }
 
 func TestSimpleHand(t *testing.T) {
+	// TODO check the new hand / etc notifs
 	tableName := "test table"
 	ts, p1, p2 := createTableWithTwoPlayers(tableName)
 	ps := []*Player{p1, p2}

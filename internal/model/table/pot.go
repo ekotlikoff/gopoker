@@ -90,7 +90,8 @@ func (hand *Hand) getPlayerRanking() [][]*Player {
 	return playerRanking
 }
 
-func (hand *Hand) distributePots(playerRanking [][]*Player) {
+func (hand *Hand) distributePots(playerRanking [][]*Player) []Winner {
+	var out []Winner
 	for _, pot := range append(hand.Pot.SidePots, hand.Pot.MainPot) {
 		for _, pRanking := range playerRanking {
 			winners := []*Player{}
@@ -102,15 +103,17 @@ func (hand *Hand) distributePots(playerRanking [][]*Player) {
 			if len(winners) > 0 {
 				minWinnings := pot.Pot / len(winners)
 				for i, p := range winners {
+					winnings := minWinnings
 					if i == len(winners)-1 {
-						p.Funds += pot.Pot
-					} else {
-						p.Funds += minWinnings
-						pot.Pot -= minWinnings
+						winnings = pot.Pot
 					}
+					pot.Pot -= winnings
+					p.Funds += winnings
+					out = append(out, Winner{Player: *p, Winnings: winnings})
 				}
 				break
 			}
 		}
 	}
+	return out
 }

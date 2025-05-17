@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chehsunliu/poker"
 	model "github.com/ekotlikoff/gopoker/internal/model/table"
 )
 
@@ -37,10 +38,16 @@ const (
 
 // Various types of updates that can be sent to a client.
 const (
-	// FullUpdateT is the full update including the entire table's state.
-	FullUpdateT = PlayerUpdateType(iota)
+	// NewHandUpdateT is the newest hand, and the player's hand.
+	NewHandUpdateT = PlayerUpdateType(iota)
 	// RoundUpdateT is the most recent RoundAction made by an opponent.
 	RoundUpdateT = PlayerUpdateType(iota)
+	// DealUpdateT is the new set of community cards.
+	DealUpdateT = PlayerUpdateType(iota)
+	// HandOverUpdateT is the result of the latest hand.
+	HandOverUpdateT = PlayerUpdateType(iota)
+	// FullUpdateT is the full update including the entire table's state.
+	FullUpdateT = PlayerUpdateType(iota)
 	// TableUpdateT is a table action e.g. a pause, somewhat standing up, etc.
 	TableUpdateT = PlayerUpdateType(iota)
 	// StateUpdateT is an update to table state - table no longer playing, etc.
@@ -72,10 +79,16 @@ type (
 	PlayerUpdate struct {
 		// Type is the type of the update.
 		Type PlayerUpdateType
-		// Table is the full model.Table.
-		Table model.Table
+		// Hole is the player's hole in the newest hand.
+		Hole []poker.Card
+		// Board is the new set of community cards corresponding to a deal update.
+		Board []poker.Card
+		// Winners is the result of the latest hand.
+		Winners []model.Winner
 		// RoundAction is the round action for the current better.
 		RoundAction model.RoundAction
+		// Table is the full model.Table.
+		Table model.Table
 		// TableAction is a table action that may be relevant to a client.
 		TableAction TableAction
 		// StateUpdate is an update to the table's state
@@ -371,6 +384,12 @@ func (t *Table) setPlaying(p bool) {
 	t.playing = p
 }
 
+func (t *Table) getBoard() []poker.Card {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.table.Board()
+}
+
 func (t *Table) getTimeToBet() time.Duration {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -411,23 +430,25 @@ func (ts *TableServer) serveTable(t *Table) error {
 			log.Print(err)
 			return err
 		}
+		// TODO send bet updates (little and big blind)
+		t.sendNewHandUpdates()
 		t.handlePause()
 		t.listenForPlayerActions()
 		for !t.table.HandDone() {
-			// TODO send deal update
 			t.table.Deal()
-			// TODO send waiting for bet
+			t.sendPlayerUpdates(newDealUpdate(t.getBoard()))
 			t.listenForPlayerActions()
 			if len(t.table.Board()) == 5 {
 				t.table.SetHandDone(true)
 			}
 		}
-		// TODO send player update for who the winner(s) were and their winnings
-		if err := t.table.FinishHand(); err != nil {
+		err, winners := t.table.FinishHand()
+		if err != nil {
 			t.setPlaying(false)
 			log.Println(err)
 			return err
 		}
+		t.sendPlayerUpdates(newHandOverUpdate(winners))
 		time.Sleep(t.getTimeBetweenHands())
 		t.sendPlayerUpdates(newStateUpdate(false, t.table.HandleStanders()))
 
@@ -441,6 +462,30 @@ func (t *Table) handlePause() {
 	default:
 	}
 
+}
+
+func (t *Table) sendNewHandUpdates() {
+	for _, p := range t.players {
+		p.sendPlayerUpdate(
+			&PlayerUpdate{
+				Type: NewHandUpdateT,
+				Hole: p.playerModel.Hole,
+			})
+	}
+}
+
+func newDealUpdate(board []poker.Card) *PlayerUpdate {
+	return &PlayerUpdate{
+		Type:  DealUpdateT,
+		Board: board,
+	}
+}
+
+func newHandOverUpdate(winners []model.Winner) *PlayerUpdate {
+	return &PlayerUpdate{
+		Type:    HandOverUpdateT,
+		Winners: winners,
+	}
 }
 
 func newStateUpdate(playStopped bool, nowStanding []string) *PlayerUpdate {
@@ -471,6 +516,7 @@ func (t *Table) listenForPlayerActions() {
 	for !t.table.RoundDone() && !t.table.BettingDone() && !t.table.HandDone() {
 		success := false
 		player := t.table.CurrentBetter()
+		// TODO maybe send TimeToBet notif to current better
 		timeRemaining := t.getTimeToBet()
 		for !success {
 			ctx, cancel := context.WithTimeout(context.Background(), timeRemaining)
@@ -498,14 +544,18 @@ func (t *Table) sendPlayerUpdates(u *PlayerUpdate) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	for _, p := range t.players {
-		go func(p *Player) {
-			select {
-			case p.TableUpdateChan <- u:
-			case <-time.After(500 * time.Millisecond):
-				log.Printf("time out sending to %s's tableUpdateChan", p.playerModel.Name)
-			}
-		}(p)
+		p.sendPlayerUpdate(u)
 	}
+}
+
+func (p *Player) sendPlayerUpdate(u *PlayerUpdate) {
+	go func(p *Player) {
+		select {
+		case p.TableUpdateChan <- u:
+		case <-time.After(500 * time.Millisecond):
+			log.Printf("time out sending to %s's tableUpdateChan", p.playerModel.Name)
+		}
+	}(p)
 }
 
 func getPlayerAction(ctx context.Context, player *Player, t *Table) model.RoundAction {
