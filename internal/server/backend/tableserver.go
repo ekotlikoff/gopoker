@@ -16,21 +16,21 @@ const (
 	// Stand is a player's attempt to stand up from the table.
 	Stand = TableActionType(iota)
 	// Sit is a player's attempt to sit at the table.
-	Sit = TableActionType(iota)
+	Sit
 	// Leave is a player's attempt to leave a table.
-	Leave = TableActionType(iota)
+	Leave
 	// Join is a player's attempt to join a table.
-	Join = TableActionType(iota)
+	Join
 	// Create is a player's attempt to create a new table.
-	Create = TableActionType(iota)
+	Create
 	// Start is a player's attempt to start a table's play.
-	Start = TableActionType(iota)
+	Start
 	// Pause is a player's attempt to pause a table's play.
-	Pause = TableActionType(iota)
+	Pause
 	// Unpause is a player's attempt to unpause a table's play.
-	Unpause = TableActionType(iota)
+	Unpause
 	// Refresh is a request for full state, for example after a browser refresh.
-	Refresh = TableActionType(iota)
+	Refresh
 
 	defaultTimeToBet        = time.Second * 30
 	defaultTimeBetweenHands = time.Second * 5
@@ -81,12 +81,18 @@ type (
 		Type PlayerUpdateType
 		// Hole is the player's hole in the newest hand.
 		Hole []poker.Card
+		// BigBlind is the big blind for the current hand.
+		BigBlind int
+		// Dealer is the new hand's dealer.
+		Dealer string
 		// Board is the new set of community cards corresponding to a deal update.
 		Board []poker.Card
 		// Winners is the result of the latest hand.
 		Winners []model.Winner
 		// RoundAction is the round action for the current better.
 		RoundAction model.RoundAction
+		// CurrentBetter is the player that made the round action.
+		CurrentBetter string
 		// Table is the full model.Table.
 		Table model.Table
 		// TableAction is a table action that may be relevant to a client.
@@ -416,6 +422,18 @@ func (ts *TableServer) start(a TableAction) error {
 	return nil
 }
 
+func (t *Table) dealer() string {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.table.Dealer().Name
+}
+
+func (t *Table) bigBlindAmount() int {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.table.Hand.BigBlindAmount()
+}
+
 func (ts *TableServer) serveTable(t *Table) error {
 	if t.isPlaying() {
 		return errors.New("play: table already playing")
@@ -430,8 +448,7 @@ func (ts *TableServer) serveTable(t *Table) error {
 			log.Print(err)
 			return err
 		}
-		// TODO send bet updates (little and big blind)
-		t.sendNewHandUpdates()
+		t.sendNewHandUpdates(t.bigBlindAmount(), t.dealer())
 		t.handlePause()
 		t.listenForPlayerActions()
 		for !t.table.HandDone() {
@@ -449,8 +466,8 @@ func (ts *TableServer) serveTable(t *Table) error {
 			return err
 		}
 		t.sendPlayerUpdates(newHandOverUpdate(winners))
-		time.Sleep(t.getTimeBetweenHands())
 		t.sendPlayerUpdates(newStateUpdate(false, t.table.HandleStanders()))
+		time.Sleep(t.getTimeBetweenHands())
 
 	}
 }
@@ -464,14 +481,19 @@ func (t *Table) handlePause() {
 
 }
 
-func (t *Table) sendNewHandUpdates() {
+func (t *Table) sendNewHandUpdates(bb int, d string) {
+	var wg sync.WaitGroup
 	for _, p := range t.players {
+		wg.Add(1)
 		p.sendPlayerUpdate(
 			&PlayerUpdate{
-				Type: NewHandUpdateT,
-				Hole: p.playerModel.Hole,
-			})
+				Type:     NewHandUpdateT,
+				Hole:     p.playerModel.Hole,
+				BigBlind: bb,
+				Dealer:   d,
+			}, &wg)
 	}
+	wg.Wait()
 }
 
 func newDealUpdate(board []poker.Card) *PlayerUpdate {
@@ -505,10 +527,11 @@ func newTableUpdate(a TableAction) *PlayerUpdate {
 	}
 }
 
-func newRoundUpdate(a model.RoundAction) *PlayerUpdate {
+func newRoundUpdate(a model.RoundAction, p *model.Player) *PlayerUpdate {
 	return &PlayerUpdate{
-		Type:        RoundUpdateT,
-		RoundAction: a,
+		Type:          RoundUpdateT,
+		RoundAction:   a,
+		CurrentBetter: p.Name,
 	}
 }
 
@@ -516,7 +539,6 @@ func (t *Table) listenForPlayerActions() {
 	for !t.table.RoundDone() && !t.table.BettingDone() && !t.table.HandDone() {
 		success := false
 		player := t.table.CurrentBetter()
-		// TODO maybe send TimeToBet notif to current better
 		timeRemaining := t.getTimeToBet()
 		for !success {
 			ctx, cancel := context.WithTimeout(context.Background(), timeRemaining)
@@ -527,7 +549,7 @@ func (t *Table) listenForPlayerActions() {
 			err := t.table.HandlePlayerAction(player, a)
 			timeRemaining -= time.Since(n)
 			if err == nil {
-				t.sendPlayerUpdates(newRoundUpdate(a))
+				t.sendPlayerUpdates(newRoundUpdate(a, player))
 				success = true
 			} else {
 				log.Println(err)
@@ -543,18 +565,22 @@ func (t *Table) listenForPlayerActions() {
 func (t *Table) sendPlayerUpdates(u *PlayerUpdate) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
+	var wg sync.WaitGroup
 	for _, p := range t.players {
-		p.sendPlayerUpdate(u)
+		wg.Add(1)
+		p.sendPlayerUpdate(u, &wg)
 	}
+	wg.Wait()
 }
 
-func (p *Player) sendPlayerUpdate(u *PlayerUpdate) {
+func (p *Player) sendPlayerUpdate(u *PlayerUpdate, wg *sync.WaitGroup) {
 	go func(p *Player) {
 		select {
 		case p.TableUpdateChan <- u:
 		case <-time.After(500 * time.Millisecond):
 			log.Printf("time out sending to %s's tableUpdateChan", p.playerModel.Name)
 		}
+		wg.Done()
 	}(p)
 }
 
@@ -575,5 +601,74 @@ func getPlayerAction(ctx context.Context, player *Player, t *Table) model.RoundA
 			log.Println(player.playerModel.Name, "timed out, folding")
 			return action
 		}
+	}
+}
+
+func (u *PlayerUpdate) String() string {
+	var out string
+	out += fmt.Sprintf("%s: ", u.Type)
+	switch u.Type {
+	case DealUpdateT:
+		out += fmt.Sprint(u.Board)
+	case FullUpdateT:
+	case RoundUpdateT:
+		out += fmt.Sprintf("%s did %v\n", u.CurrentBetter, u.RoundAction)
+	case StateUpdateT:
+		out += fmt.Sprintf("%+v\n", u.StateUpdate)
+	case TableUpdateT:
+		out += fmt.Sprintf("%+v\n", u.TableAction)
+	case NewHandUpdateT:
+		out += fmt.Sprintf("hole: %v, dealer: %s, big blind: %d\n", u.Hole, u.Dealer, u.BigBlind)
+	case HandOverUpdateT:
+		out += fmt.Sprintf("%+v\n", u.Winners)
+	default:
+		return "Unknown"
+	}
+	return out
+}
+
+func (u PlayerUpdateType) String() string {
+	switch u {
+	case DealUpdateT:
+		return "DealUpdateT"
+	case FullUpdateT:
+		return "FullUpdateT"
+	case RoundUpdateT:
+		return "RoundUpdateT"
+	case StateUpdateT:
+		return "StateUpdateT"
+	case TableUpdateT:
+		return "TableUpdateT"
+	case NewHandUpdateT:
+		return "NewHandUpdateT"
+	case HandOverUpdateT:
+		return "HandOverUpdateT"
+	default:
+		return "Unknown"
+	}
+}
+
+func (t TableActionType) String() string {
+	switch t {
+	case Stand:
+		return "Stand"
+	case Sit:
+		return "Sit"
+	case Leave:
+		return "Leave"
+	case Join:
+		return "Join"
+	case Create:
+		return "Create"
+	case Start:
+		return "Start"
+	case Pause:
+		return "Pause"
+	case Unpause:
+		return "Unpause"
+	case Refresh:
+		return "Refresh"
+	default:
+		return "Unknown"
 	}
 }

@@ -13,11 +13,11 @@ const (
 	// AllIn takes the player all in
 	AllIn = ActionType(iota)
 	// Raise the current bet
-	Raise = ActionType(iota)
+	Raise
 	// Call the current bet
-	Call = ActionType(iota)
+	Call
 	// Fold your hand
-	Fold = ActionType(iota)
+	Fold
 )
 
 type (
@@ -174,6 +174,11 @@ func (hand *Hand) bigBlindRing() *ring.Ring {
 // BigBlind is the big blind of the hand
 func (hand *Hand) BigBlind() *Player {
 	return RingToPlayer(hand.bigBlindRing())
+}
+
+// BigBlindAmount is the amount for this hand's big blind.
+func (hand *Hand) BigBlindAmount() int {
+	return hand.TableConfig.minBet
 }
 
 func (hand *Hand) takeBlinds() {
@@ -417,4 +422,23 @@ func (hand *Hand) String() string {
 		out += "\n"
 	})
 	return out
+}
+
+func (a ActionType) String() string {
+	switch a {
+	case AllIn:
+		return "AllIn"
+	case Raise:
+		return "Raise"
+	case Call:
+		return "Call"
+	case Fold:
+		return "Fold"
+	default:
+		return "unknown"
+	}
+}
+
+func (ra RoundAction) String() string {
+	return fmt.Sprintf("action: %s, bet: %d\n", ra.ActionType, ra.Bet)
 }

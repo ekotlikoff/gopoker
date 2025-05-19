@@ -1,7 +1,6 @@
 package chessserver
 
 import (
-	"fmt"
 	"testing"
 
 	model "github.com/ekotlikoff/gopoker/internal/model/table"
@@ -125,11 +124,19 @@ func createTableWithTwoPlayers(tableName string) (*TableServer, *Player, *Player
 	return ts, p1, p2
 }
 
+func checkForUpdate(t *testing.T, p *Player, want PlayerUpdateType) *PlayerUpdate {
+	t.Helper()
+	u := <-p.TableUpdateChan
+	if u.Type != want {
+		t.Errorf("want %v got %v", want, u.Type)
+	}
+	return u
+}
+
 func TestSimpleHand(t *testing.T) {
-	// TODO check the new hand / etc notifs
+	// TODO mock time so that we don't need to wait for time between hands
 	tableName := "test table"
 	ts, p1, p2 := createTableWithTwoPlayers(tableName)
-	ps := []*Player{p1, p2}
 	ts.SendTableAction(StartTableAction(tableName, p2))
 	if r := p2.GetTableResponse(); r.Err == nil {
 		t.Error("only the admin should be able to start the table")
@@ -138,82 +145,108 @@ func TestSimpleHand(t *testing.T) {
 	if r := p1.GetTableResponse(); r.Err != nil {
 		t.Error("the admin should be able to start the table")
 	}
-	consumeTableUpdates(ps...)
+	checkForUpdate(t, p1, TableUpdateT)
+	checkForUpdate(t, p2, TableUpdateT)
+	checkForUpdate(t, p1, NewHandUpdateT)
+	u := checkForUpdate(t, p2, NewHandUpdateT)
+	if u.Hole == nil {
+		t.Errorf("expected player hand provided in NewHandUpdateT, u.Hole == nil")
+	}
 	table := ts.tables[tableName]
-	fmt.Println(table.table)
+	if !table.playing {
+		t.Error("table should be playing")
+	}
+	if table.dealer() != p2.playerModel.Name {
+		t.Errorf("dealer should be %v, got %v", p1.playerModel.Name, table.dealer())
+	}
 	p2.SendRoundAction(model.RoundAction{ActionType: model.Call})
 	if r := p2.GetRoundResponse(); r.Err != nil {
 		t.Errorf("expected a successful bet, got error: %s", r.Err)
 	}
-	consumeTableUpdates(ps...)
-	fmt.Println(table.table)
+	checkForUpdate(t, p1, RoundUpdateT)
+	checkForUpdate(t, p2, RoundUpdateT)
 	p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
 	if r := p1.GetRoundResponse(); r.Err != nil {
 		t.Errorf("expected a successful bet, got error: %s", r.Err)
 	}
-	fmt.Println(table.table)
-	// consumeTableUpdates(ps...)
-	// p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
-	// p1.GetRoundResponse()
-	// consumeTableUpdates(ps...)
-	//
-	//	if !table.playing {
-	//		t.Error("table should be playing")
-	//	}
-	//
-	// time.Sleep(time.Second)
-	//
-	//	if len(table.table.Board()) != 3 {
-	//		t.Errorf("expected the flop, len(table.table.Board())==%d", len(table.table.Board()))
-	//	}
-	//
-	// ts.SendTableAction(StandTableAction(tableName, p1))
-	// p1.GetTableResponse()
-	// consumeTableUpdates(ps...)
-	// ts.SendTableAction(StandTableAction(tableName, p2))
-	// p2.GetTableResponse()
-	// consumeTableUpdates(ps...)
+	checkForUpdate(t, p2, RoundUpdateT)
+	update := checkForUpdate(t, p1, RoundUpdateT)
+	if update.CurrentBetter != p1.playerModel.Name {
+		t.Errorf("expected p1, got %s", update.CurrentBetter)
+	}
+	checkForUpdate(t, p1, DealUpdateT)
+	checkForUpdate(t, p2, DealUpdateT)
+	if len(table.table.Board()) != 3 {
+		t.Errorf("expected the flop, len(table.table.Board())==%d", len(table.table.Board()))
+	}
+	ts.SendTableAction(StandTableAction(tableName, p1))
+	if r := p1.GetTableResponse(); r.Err != nil {
+		t.Errorf("expected a successful stand, got error: %s", r.Err)
+	}
+	if !p1.playerModel.WantToStandUp {
+		t.Error("p1 should want to stand up")
+	}
+	checkForUpdate(t, p1, TableUpdateT)
+	checkForUpdate(t, p2, TableUpdateT)
+	ts.SendTableAction(StandTableAction(tableName, p2))
+	p2.GetTableResponse()
+	checkForUpdate(t, p1, TableUpdateT)
+	checkForUpdate(t, p2, TableUpdateT)
+	p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	if r := p1.GetRoundResponse(); r.Err != nil {
+		t.Errorf("expected a successful bet, got error: %s", r.Err)
+	}
+	checkForUpdate(t, p1, RoundUpdateT)
+	checkForUpdate(t, p2, RoundUpdateT)
 	// // TODO add timeouts for the server's SendRoundResponse
-	// p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
-	// p1.GetRoundResponse()
-	// consumeTableUpdates(ps...)
-	// p2.SendRoundAction(model.RoundAction{ActionType: model.Call})
-	// p2.GetRoundResponse()
-	// consumeTableUpdates(ps...)
-	// p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
-	// p1.GetRoundResponse()
-	// consumeTableUpdates(ps...)
-	// p2.SendRoundAction(model.RoundAction{ActionType: model.Call})
-	// p2.GetRoundResponse()
-	// consumeTableUpdates(ps...)
-	// p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
-	// p1.GetRoundResponse()
-	// consumeTableUpdates(ps...)
-	// p2.SendRoundAction(model.RoundAction{ActionType: model.Call})
-	// p2.GetRoundResponse()
-	// consumeTableUpdates(ps...)
-	//
-	//	go func() {
-	//		update := <-p1.TableUpdateChan
-	//		if len(update.StateUpdate.NowStanding) != 2 {
-	//			t.Errorf("expected two standers, got %d", len(update.StateUpdate.NowStanding))
-	//		}
-	//		update = <-p1.TableUpdateChan
-	//		if !update.StateUpdate.PlayStopped {
-	//			t.Error("expected play to stop after standing")
-	//		}
-	//	}()
-	//
-	//	go func() {
-	//		update := <-p2.TableUpdateChan
-	//		if len(update.StateUpdate.NowStanding) != 2 {
-	//			t.Errorf("expected two standers, got %d", len(update.StateUpdate.NowStanding))
-	//		}
-	//		update = <-p2.TableUpdateChan
-	//		if !update.StateUpdate.PlayStopped {
-	//			t.Error("expected play to stop after standing")
-	//		}
-	//	}()
+	p2.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	p2.GetRoundResponse()
+	checkForUpdate(t, p1, RoundUpdateT)
+	checkForUpdate(t, p2, RoundUpdateT)
+	checkForUpdate(t, p1, DealUpdateT)
+	checkForUpdate(t, p2, DealUpdateT)
+	if len(table.table.Board()) != 4 {
+		t.Errorf("len(table.table.Board())==%d, want 4", len(table.table.Board()))
+	}
+	p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	if r := p1.GetRoundResponse(); r.Err != nil {
+		t.Errorf("expected a successful bet, got error: %s", r.Err)
+	}
+	checkForUpdate(t, p1, RoundUpdateT)
+	checkForUpdate(t, p2, RoundUpdateT)
+	p2.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	p2.GetRoundResponse()
+	checkForUpdate(t, p1, RoundUpdateT)
+	checkForUpdate(t, p2, RoundUpdateT)
+	checkForUpdate(t, p1, DealUpdateT)
+	checkForUpdate(t, p2, DealUpdateT)
+	if len(table.table.Board()) != 5 {
+		t.Errorf("len(table.table.Board())==%d, want 5", len(table.table.Board()))
+	}
+	p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	if r := p1.GetRoundResponse(); r.Err != nil {
+		t.Errorf("expected a successful bet, got error: %s", r.Err)
+	}
+	checkForUpdate(t, p1, RoundUpdateT)
+	checkForUpdate(t, p2, RoundUpdateT)
+	p2.SendRoundAction(model.RoundAction{ActionType: model.Call})
+	if !p1.playerModel.WantToStandUp {
+		t.Error("p1 should want to stand up")
+	}
+	p2.GetRoundResponse()
+	checkForUpdate(t, p1, RoundUpdateT)
+	checkForUpdate(t, p2, RoundUpdateT)
+	checkForUpdate(t, p1, HandOverUpdateT)
+	checkForUpdate(t, p2, HandOverUpdateT)
+	checkForUpdate(t, p1, StateUpdateT)
+	update = checkForUpdate(t, p2, StateUpdateT)
+	if len(update.StateUpdate.NowStanding) != 2 {
+		t.Errorf("expected two standers, got %d", len(update.StateUpdate.NowStanding))
+	}
+	update = <-p1.TableUpdateChan
+	if !update.StateUpdate.PlayStopped {
+		t.Error("expected play to stop after standing")
+	}
 }
 
 // TODO test pause
