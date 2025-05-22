@@ -2,13 +2,37 @@ package chessserver
 
 import (
 	"testing"
+	"time"
 
 	model "github.com/ekotlikoff/gopoker/internal/model/table"
 )
 
+type mockTime struct {
+	t           time.Time
+	tickers     []chan time.Time
+	tickerTimes []time.Time
+}
+
+func (m mockTime) now() time.Time { return m.t }
+func (m *mockTime) after(d time.Duration) <-chan time.Time {
+	m.tickerTimes = append(m.tickerTimes, m.t.Add(d))
+	ticker := make(chan time.Time)
+	m.tickers = append(m.tickers, ticker)
+	return ticker
+}
+func (m *mockTime) sleep(d time.Duration) { m.t = m.t.Add(d) }
+func (m *mockTime) stepTime(d time.Duration) {
+	m.t = m.t.Add(d)
+	for i, t := range m.tickerTimes {
+		if m.t.After(t) {
+			m.tickers[i] <- m.t
+		}
+	}
+}
+
 func TestCreateAndJoin(t *testing.T) {
 	tableName := "test table"
-	ts := NewTableServer()
+	ts := NewTableServerWithTime(&mockTime{})
 	go ts.Serve()
 	p1 := NewPlayer("1")
 	p2 := NewPlayer("2")
@@ -43,7 +67,7 @@ func TestCreateAndJoin(t *testing.T) {
 
 func TestJoinFakeTable(t *testing.T) {
 	tableName := "test table"
-	ts := NewTableServer()
+	ts := NewTableServerWithTime(&mockTime{})
 	go ts.Serve()
 	p1 := NewPlayer("1")
 	p2 := NewPlayer("2")
@@ -63,7 +87,7 @@ func TestJoinFakeTable(t *testing.T) {
 
 func TestSit(t *testing.T) {
 	tableName := "test table"
-	ts := NewTableServer()
+	ts := NewTableServerWithTime(&mockTime{})
 	go ts.Serve()
 	p1 := NewPlayer("1")
 	p2 := NewPlayer("2")
@@ -100,7 +124,7 @@ func consumeTableUpdates(ps ...*Player) {
 }
 
 func createTableWithTwoPlayers(tableName string) (*TableServer, *Player, *Player) {
-	ts := NewTableServer()
+	ts := NewTableServerWithTime(&mockTime{})
 	go ts.Serve()
 	p1 := NewPlayer("1")
 	p2 := NewPlayer("2")
@@ -134,7 +158,6 @@ func checkForUpdate(t *testing.T, p *Player, want PlayerUpdateType) *PlayerUpdat
 }
 
 func TestSimpleHand(t *testing.T) {
-	// TODO mock time so that we don't need to wait for time between hands
 	tableName := "test table"
 	ts, p1, p2 := createTableWithTwoPlayers(tableName)
 	ts.SendTableAction(StartTableAction(tableName, p2))

@@ -55,6 +55,11 @@ const (
 )
 
 type (
+	Time interface {
+		now() time.Time
+		sleep(time.Duration)
+		after(time.Duration) <-chan time.Time
+	}
 	// TableServerConfig defines the TableServer's behavior.
 	TableServerConfig struct {
 		maxConcurrentTables int
@@ -124,6 +129,7 @@ type (
 		adminName   string
 		mutex       sync.Mutex
 		table       *model.Table
+		time        Time
 		playing     bool
 		pauseChan   chan struct{}
 		unpauseChan chan struct{}
@@ -134,6 +140,7 @@ type (
 		tableServerConfig TableServerConfig
 		tables            map[string]*Table
 		tableActions      chan TableAction
+		time              Time
 		mutex             sync.Mutex
 	}
 
@@ -179,14 +186,26 @@ func NewPlayer(name string) *Player {
 	}
 }
 
+type realTime struct{}
+
+func (realTime) now() time.Time                         { return time.Now() }
+func (realTime) sleep(d time.Duration)                  { time.Sleep(d) }
+func (realTime) after(d time.Duration) <-chan time.Time { return time.After(d) }
+
 // NewTableServer creates a new TableServer.
 func NewTableServer() *TableServer {
+	return NewTableServerWithTime(realTime{})
+}
+
+// NewTableServerWithTime creates a new TableServer with specified time implementations.
+func NewTableServerWithTime(t Time) *TableServer {
 	return &TableServer{
 		tableServerConfig: TableServerConfig{
 			maxConcurrentTables: 5,
 		},
 		tables:       make(map[string]*Table),
 		tableActions: make(chan TableAction),
+		time:         t,
 	}
 }
 
@@ -214,6 +233,7 @@ func (ts *TableServer) newTable(name string, config TableConfig, creator string)
 		pauseChan:   make(chan struct{}),
 		unpauseChan: make(chan struct{}),
 		players:     make(map[string]*Player),
+		time:        ts.time,
 	}
 	return nil
 }
@@ -467,7 +487,7 @@ func (ts *TableServer) serveTable(t *Table) error {
 		}
 		t.sendPlayerUpdates(newHandOverUpdate(winners))
 		t.sendPlayerUpdates(newStateUpdate(false, t.table.HandleStanders()))
-		time.Sleep(t.getTimeBetweenHands())
+		t.time.sleep(t.getTimeBetweenHands())
 
 	}
 }
@@ -543,11 +563,11 @@ func (t *Table) listenForPlayerActions() {
 		for !success {
 			ctx, cancel := context.WithTimeout(context.Background(), timeRemaining)
 			defer cancel()
-			n := time.Now()
+			n := t.time.now()
 			client := t.players[player.Name]
 			a := getPlayerAction(ctx, client, t)
 			err := t.table.HandlePlayerAction(player, a)
-			timeRemaining -= time.Since(n)
+			timeRemaining -= t.time.now().Sub(n)
 			if err == nil {
 				t.sendPlayerUpdates(newRoundUpdate(a, player))
 				success = true
@@ -577,7 +597,7 @@ func (p *Player) sendPlayerUpdate(u *PlayerUpdate, wg *sync.WaitGroup) {
 	go func(p *Player) {
 		select {
 		case p.TableUpdateChan <- u:
-		case <-time.After(500 * time.Millisecond):
+		case <-p.table.time.after(500 * time.Millisecond):
 			log.Printf("time out sending to %s's tableUpdateChan", p.playerModel.Name)
 		}
 		wg.Done()
