@@ -182,7 +182,7 @@ func getSession(w http.ResponseWriter, r *http.Request) {
 	SessionSpan := tracer.StartSpan("GETSession")
 	defer SessionSpan.Finish()
 	player := GetSession(w, r)
-	currentMatchResponse := SessionResponse{}
+	var currentMatchResponse SessionResponse
 	if player == nil {
 		return
 	} else if player.GetTable() == nil {

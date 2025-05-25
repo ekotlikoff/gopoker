@@ -382,7 +382,7 @@ func (ts *TableServer) Serve() {
 // GetTable get's the player's current table.
 func (p *Player) GetTable() *Table {
 	p.mutex.Lock()
-	p.mutex.Unlock()
+	defer p.mutex.Unlock()
 	return p.table
 }
 
