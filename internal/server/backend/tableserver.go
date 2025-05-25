@@ -1,7 +1,6 @@
 package chessserver
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -42,6 +41,8 @@ const (
 	NewHandUpdateT = PlayerUpdateType(iota)
 	// RoundUpdateT is the most recent RoundAction made by an opponent.
 	RoundUpdateT = PlayerUpdateType(iota)
+	// BetUpdateT is a notification to the current better that the table is awaiting their bet.
+	BetUpdateT = PlayerUpdateType(iota)
 	// DealUpdateT is the new set of community cards.
 	DealUpdateT = PlayerUpdateType(iota)
 	// HandOverUpdateT is the result of the latest hand.
@@ -285,23 +286,40 @@ func StartTableAction(t string, p *Player) TableAction {
 	}
 }
 
+// PauseTableAction pauses the table.
+func PauseTableAction(t string, p *Player) TableAction {
+	return TableAction{
+		tableActionType: Pause,
+		tableName:       t,
+		player:          p,
+	}
+}
+
+// UnpauseTableAction unpauses the table.
+func UnpauseTableAction(t string, p *Player) TableAction {
+	return TableAction{
+		tableActionType: Unpause,
+		tableName:       t,
+		player:          p,
+	}
+}
+
 // Serve starts the table server
 func (ts *TableServer) Serve() {
 	for a := range ts.tableActions {
+		var err error
 		switch a.tableActionType {
 		case Create:
-			err := ts.newTable(
+			err = ts.newTable(
 				a.tableName,
 				a.tableConfig,
 				a.player.playerModel.Name,
 			)
-			a.player.tableResponseChan <- TableActionResponse{err}
 		case Stand:
 			ts.mutex.Lock()
 			a.player.playerModel.StandUp()
 			a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
 			ts.mutex.Unlock()
-			a.player.tableResponseChan <- TableActionResponse{}
 		case Sit:
 			ts.mutex.Lock()
 			p := a.player
@@ -312,7 +330,7 @@ func (ts *TableServer) Serve() {
 				}
 				continue
 			}
-			err := table.table.SitDown(
+			err = table.table.SitDown(
 				a.player.playerModel, a.seat,
 			)
 			if err == nil {
@@ -321,18 +339,16 @@ func (ts *TableServer) Serve() {
 				a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
 			}
 			ts.mutex.Unlock()
-			a.player.tableResponseChan <- TableActionResponse{err}
 		case Leave:
 			ts.mutex.Lock()
-			err := a.player.playerModel.Leave()
+			err = a.player.playerModel.Leave()
 			if err == nil {
 				a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
 			}
 			ts.mutex.Unlock()
-			a.player.tableResponseChan <- TableActionResponse{err}
 		case Join:
 			ts.mutex.Lock()
-			err := fmt.Errorf("table %q does not exist", a.tableName)
+			err = fmt.Errorf("table %q does not exist", a.tableName)
 			for _, t := range ts.tables {
 				if t.name == a.tableName {
 					err = a.player.join(t)
@@ -343,16 +359,15 @@ func (ts *TableServer) Serve() {
 				a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
 			}
 			ts.mutex.Unlock()
-			a.player.tableResponseChan <- TableActionResponse{err}
 		case Start:
-			err := ts.start(a)
-			a.player.tableResponseChan <- TableActionResponse{err}
+			err = ts.start(a)
 		case Pause:
+			// TODO who should be allowed to pause?
+			a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
 			ts.tables[a.tableName].pauseChan <- struct{}{}
-			a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
 		case Unpause:
-			ts.tables[a.tableName].unpauseChan <- struct{}{}
 			a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
+			ts.tables[a.tableName].unpauseChan <- struct{}{}
 		case Refresh:
 			// TODO
 			log.Fatalf("not implemented")
@@ -360,6 +375,7 @@ func (ts *TableServer) Serve() {
 				Type: FullUpdateT,
 			}
 		}
+		a.player.tableResponseChan <- TableActionResponse{err}
 	}
 }
 
@@ -468,6 +484,7 @@ func (ts *TableServer) serveTable(t *Table) error {
 			log.Print(err)
 			return err
 		}
+		log.Println("new hand started")
 		t.sendNewHandUpdates(t.bigBlindAmount(), t.dealer())
 		t.handlePause()
 		t.listenForPlayerActions()
@@ -485,8 +502,12 @@ func (ts *TableServer) serveTable(t *Table) error {
 			log.Println(err)
 			return err
 		}
+		log.Println("hand over")
 		t.sendPlayerUpdates(newHandOverUpdate(winners))
-		t.sendPlayerUpdates(newStateUpdate(false, t.table.HandleStanders()))
+		standers := t.table.HandleStanders()
+		if standers != nil {
+			t.sendPlayerUpdates(newStateUpdate(false, standers))
+		}
 		t.time.sleep(t.getTimeBetweenHands())
 
 	}
@@ -504,7 +525,6 @@ func (t *Table) handlePause() {
 func (t *Table) sendNewHandUpdates(bb int, d string) {
 	var wg sync.WaitGroup
 	for _, p := range t.players {
-		wg.Add(1)
 		p.sendPlayerUpdate(
 			&PlayerUpdate{
 				Type:     NewHandUpdateT,
@@ -547,6 +567,12 @@ func newTableUpdate(a TableAction) *PlayerUpdate {
 	}
 }
 
+func newBetUpdate() *PlayerUpdate {
+	return &PlayerUpdate{
+		Type: BetUpdateT,
+	}
+}
+
 func newRoundUpdate(a model.RoundAction, p *model.Player) *PlayerUpdate {
 	return &PlayerUpdate{
 		Type:          RoundUpdateT,
@@ -561,13 +587,10 @@ func (t *Table) listenForPlayerActions() {
 		player := t.table.CurrentBetter()
 		timeRemaining := t.getTimeToBet()
 		for !success {
-			ctx, cancel := context.WithTimeout(context.Background(), timeRemaining)
-			defer cancel()
-			n := t.time.now()
 			client := t.players[player.Name]
-			a := getPlayerAction(ctx, client, t)
+			a, elapsedTime := getPlayerAction(timeRemaining, client, t)
 			err := t.table.HandlePlayerAction(player, a)
-			timeRemaining -= t.time.now().Sub(n)
+			timeRemaining -= elapsedTime
 			if err == nil {
 				t.sendPlayerUpdates(newRoundUpdate(a, player))
 				success = true
@@ -587,13 +610,13 @@ func (t *Table) sendPlayerUpdates(u *PlayerUpdate) {
 	defer t.mutex.Unlock()
 	var wg sync.WaitGroup
 	for _, p := range t.players {
-		wg.Add(1)
 		p.sendPlayerUpdate(u, &wg)
 	}
 	wg.Wait()
 }
 
 func (p *Player) sendPlayerUpdate(u *PlayerUpdate, wg *sync.WaitGroup) {
+	wg.Add(1)
 	go func(p *Player) {
 		select {
 		case p.TableUpdateChan <- u:
@@ -604,22 +627,26 @@ func (p *Player) sendPlayerUpdate(u *PlayerUpdate, wg *sync.WaitGroup) {
 	}(p)
 }
 
-func getPlayerAction(ctx context.Context, player *Player, t *Table) model.RoundAction {
+// Returns the selected player action and the elapsed time (not counting any pause)
+func getPlayerAction(timeRemaining time.Duration, player *Player, t *Table) (model.RoundAction, time.Duration) {
 	log.Println("Waiting for action from", player.playerModel.Name)
 	action := model.RoundAction{ActionType: model.Fold}
+	n := t.time.now()
+	var elapsedTime time.Duration
 	for {
+		var wg sync.WaitGroup
+		afterChan := t.time.after(timeRemaining - elapsedTime)
+		player.sendPlayerUpdate(newBetUpdate(), &wg)
+		wg.Wait()
 		select {
 		case <-t.pauseChan:
-			deadline, _ := ctx.Deadline()
+			elapsedTime += t.time.now().Sub(n)
 			<-t.unpauseChan
-			var cancel func()
-			ctx, cancel = context.WithTimeout(context.Background(), time.Until(deadline))
-			defer cancel()
 		case action = <-player.requestChan:
-			return action
-		case <-ctx.Done():
+			return action, elapsedTime + t.time.now().Sub(n)
+		case <-afterChan:
 			log.Println(player.playerModel.Name, "timed out, folding")
-			return action
+			return action, timeRemaining
 		}
 	}
 }
@@ -641,6 +668,8 @@ func (u *PlayerUpdate) String() string {
 		out += fmt.Sprintf("hole: %v, dealer: %s, big blind: %d\n", u.Hole, u.Dealer, u.BigBlind)
 	case HandOverUpdateT:
 		out += fmt.Sprintf("%+v\n", u.Winners)
+	case BetUpdateT:
+		out += fmt.Sprintf("%v\n", u.Type)
 	default:
 		return "Unknown"
 	}
@@ -661,6 +690,8 @@ func (u PlayerUpdateType) String() string {
 		return "TableUpdateT"
 	case NewHandUpdateT:
 		return "NewHandUpdateT"
+	case BetUpdateT:
+		return "BetUpdateT"
 	case HandOverUpdateT:
 		return "HandOverUpdateT"
 	default:

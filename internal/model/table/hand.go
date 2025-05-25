@@ -303,7 +303,11 @@ func (hand *Hand) nextBetter() {
 		}
 		better = better.Next()
 	}
+	log.Println("Round done")
 	hand.Round.RoundDone = true
+	if len(hand.Board) == 5 {
+		hand.HandDone = true
+	}
 }
 
 func (hand *Hand) playerFold() {

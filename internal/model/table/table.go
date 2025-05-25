@@ -212,7 +212,7 @@ func (t *Table) GetPlayers() [MaxTableSize]*Player {
 func (t *Table) HandleStanders() []string {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	newStanders := []string{}
+	var newStanders []string
 	for i, p := range t.Players {
 		if p != nil && p.WantToStandUp {
 			t.Players[i].Playing = false
