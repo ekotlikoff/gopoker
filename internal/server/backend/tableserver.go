@@ -56,7 +56,7 @@ const (
 )
 
 type (
-	Time interface {
+	clock interface {
 		now() time.Time
 		sleep(time.Duration)
 		after(time.Duration) <-chan time.Time
@@ -130,7 +130,7 @@ type (
 		adminName   string
 		mutex       sync.Mutex
 		table       *model.Table
-		time        Time
+		clock       clock
 		playing     bool
 		pauseChan   chan struct{}
 		unpauseChan chan struct{}
@@ -141,7 +141,7 @@ type (
 		tableServerConfig TableServerConfig
 		tables            map[string]*Table
 		tableActions      chan TableAction
-		time              Time
+		clock             clock
 		mutex             sync.Mutex
 	}
 
@@ -199,14 +199,14 @@ func NewTableServer() *TableServer {
 }
 
 // NewTableServerWithTime creates a new TableServer with specified time implementations.
-func NewTableServerWithTime(t Time) *TableServer {
+func NewTableServerWithTime(c clock) *TableServer {
 	return &TableServer{
 		tableServerConfig: TableServerConfig{
 			maxConcurrentTables: 5,
 		},
 		tables:       make(map[string]*Table),
 		tableActions: make(chan TableAction),
-		time:         t,
+		clock:        c,
 	}
 }
 
@@ -234,7 +234,7 @@ func (ts *TableServer) newTable(name string, config TableConfig, creator string)
 		pauseChan:   make(chan struct{}),
 		unpauseChan: make(chan struct{}),
 		players:     make(map[string]*Player),
-		time:        ts.time,
+		clock:       ts.clock,
 	}
 	return nil
 }
@@ -496,7 +496,7 @@ func (ts *TableServer) serveTable(t *Table) error {
 				t.table.SetHandDone(true)
 			}
 		}
-		err, winners := t.table.FinishHand()
+		winners, err := t.table.FinishHand()
 		if err != nil {
 			t.setPlaying(false)
 			log.Println(err)
@@ -508,7 +508,7 @@ func (ts *TableServer) serveTable(t *Table) error {
 		if standers != nil {
 			t.sendPlayerUpdates(newStateUpdate(false, standers))
 		}
-		t.time.sleep(t.getTimeBetweenHands())
+		t.clock.sleep(t.getTimeBetweenHands())
 
 	}
 }
@@ -620,7 +620,7 @@ func (p *Player) sendPlayerUpdate(u *PlayerUpdate, wg *sync.WaitGroup) {
 	go func(p *Player) {
 		select {
 		case p.TableUpdateChan <- u:
-		case <-p.table.time.after(500 * time.Millisecond):
+		case <-p.table.clock.after(500 * time.Millisecond):
 			log.Printf("time out sending to %s's tableUpdateChan", p.playerModel.Name)
 		}
 		wg.Done()
@@ -631,19 +631,19 @@ func (p *Player) sendPlayerUpdate(u *PlayerUpdate, wg *sync.WaitGroup) {
 func getPlayerAction(timeRemaining time.Duration, player *Player, t *Table) (model.RoundAction, time.Duration) {
 	log.Println("Waiting for action from", player.playerModel.Name)
 	action := model.RoundAction{ActionType: model.Fold}
-	n := t.time.now()
+	n := t.clock.now()
 	var elapsedTime time.Duration
 	for {
 		var wg sync.WaitGroup
-		afterChan := t.time.after(timeRemaining - elapsedTime)
+		afterChan := t.clock.after(timeRemaining - elapsedTime)
 		player.sendPlayerUpdate(newBetUpdate(), &wg)
 		wg.Wait()
 		select {
 		case <-t.pauseChan:
-			elapsedTime += t.time.now().Sub(n)
+			elapsedTime += t.clock.now().Sub(n)
 			<-t.unpauseChan
 		case action = <-player.requestChan:
-			return action, elapsedTime + t.time.now().Sub(n)
+			return action, elapsedTime + t.clock.now().Sub(n)
 		case <-afterChan:
 			log.Println(player.playerModel.Name, "timed out, folding")
 			return action, timeRemaining

@@ -94,7 +94,7 @@ func TestAllInSmallBlind(t *testing.T) {
 	table.Hand.Deal()
 	table.Hand.Deal()
 	table.Hand.Deal()
-	err, _ := table.Hand.FinishHand()
+	_, err := table.Hand.FinishHand()
 	if err != nil {
 		t.Error(err)
 	}
@@ -120,7 +120,7 @@ func TestAllIn(t *testing.T) {
 	table.Hand.Deal()
 	table.Hand.Deal()
 	fmt.Println(table)
-	err, _ := table.Hand.FinishHand()
+	_, err := table.Hand.FinishHand()
 	if err != nil {
 		t.Error(err)
 	}
@@ -144,7 +144,7 @@ func TestFoldWin(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	err, _ = table.Hand.FinishHand()
+	_, err = table.Hand.FinishHand()
 	if err != nil {
 		t.Error(err)
 	}
@@ -169,7 +169,7 @@ func TestRematch(t *testing.T) {
 		t.Error(err)
 	}
 	fmt.Println(table)
-	err, _ = table.FinishHand()
+	_, err = table.FinishHand()
 	if err != nil {
 		t.Error(err)
 	}
@@ -184,7 +184,7 @@ func TestRematch(t *testing.T) {
 		t.Error(err)
 	}
 	fmt.Println(table)
-	err, _ = table.FinishHand()
+	_, err = table.FinishHand()
 	if err != nil {
 		t.Error(err)
 	}
@@ -226,7 +226,7 @@ func TestFold(t *testing.T) {
 	if table.Hand.Players.Len() != 1 {
 		t.Error("expected 1 players, got", table.Hand.Players.Len())
 	}
-	err, _ = table.FinishHand()
+	_, err = table.FinishHand()
 	if err != nil {
 		t.Log(table)
 		t.Error(err)
@@ -312,7 +312,7 @@ func TestRematchPlayerOutOfFunds(t *testing.T) {
 		t.Log(table)
 		t.Error(err)
 	}
-	err, _ = table.FinishHand()
+	_, err = table.FinishHand()
 	if err != nil {
 		t.Log(table)
 		t.Error(err)

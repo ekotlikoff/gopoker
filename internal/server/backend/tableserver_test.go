@@ -309,7 +309,7 @@ func TestTimeoutMidBet(t *testing.T) {
 	checkForUpdate(t, p1, RoundUpdateT)
 	checkForUpdate(t, p2, RoundUpdateT)
 	checkForUpdate(t, p1, BetUpdateT)
-	ts.time.sleep(time.Hour)
+	ts.clock.sleep(time.Hour)
 	checkForUpdate(t, p2, RoundUpdateT)
 	u := checkForUpdate(t, p1, RoundUpdateT)
 	if u.RoundAction.ActionType != model.Fold {
@@ -351,7 +351,7 @@ func TestPauseMidBet(t *testing.T) {
 	if p1.GetTableResponse().Err != nil {
 		t.Error("expected to pause table successfully")
 	}
-	ts.time.sleep(time.Hour)
+	ts.clock.sleep(time.Hour)
 	ts.SendTableAction(UnpauseTableAction(tableName, p1))
 	checkForUpdate(t, p1, TableUpdateT)
 	checkForUpdate(t, p2, TableUpdateT)
