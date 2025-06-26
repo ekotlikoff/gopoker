@@ -1,0 +1,9 @@
+{
+	"ServiceName": "gopoker",
+	"Environment": "local",
+	"BasePath": "/poker",
+	"GatewayPort": 8003,
+	"WSPort": 8004,
+	"logFile": "",
+	"quiet": false
+}

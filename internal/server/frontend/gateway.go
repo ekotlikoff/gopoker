@@ -36,7 +36,7 @@ var (
 
 	gatewayRateLimiterMetric = prometheus.NewGaugeFunc(
 		prometheus.GaugeOpts{
-			Namespace: "gochess",
+			Namespace: "gopoker",
 			Subsystem: "gateway",
 			Name:      "rate_limiter_length",
 			Help:      "Length of the rateLimiter channel.",
@@ -48,7 +48,7 @@ var (
 
 	gatewaySessionMetric = prometheus.NewGaugeFunc(
 		prometheus.GaugeOpts{
-			Namespace: "gochess",
+			Namespace: "gopoker",
 			Subsystem: "gateway",
 			Name:      "session_count",
 			Help:      "Total number of sessions in the cache.",
@@ -63,7 +63,7 @@ var (
 
 	gatewayResponseMetric = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "gochess",
+			Namespace: "gopoker",
 			Subsystem: "gateway",
 			Name:      "request_total",
 			Help:      "Total number of requests serviced.",
@@ -73,7 +73,7 @@ var (
 
 	gatewayResponseDurationMetric = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: "gochess",
+			Namespace: "gopoker",
 			Subsystem: "gateway",
 			Name:      "request_duration",
 			Help:      "Duration of requests serviced.",
@@ -126,9 +126,9 @@ func (gw *Gateway) Serve() {
 		return prometheusMiddleware(rateLimiterMiddleware(handler))
 	}
 	mux.Handle(bp+"/", middleware(http.HandlerFunc(gw.handleWebRoot)))
-	mux.Handle(bp+"/gochessclient.wasm", middleware(http.HandlerFunc(
+	mux.Handle(bp+"/gopokerclient.wasm", middleware(http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
-			http.ServeFile(w, r, os.Getenv("HOME")+"/bin/gochessclient.wasm")
+			http.ServeFile(w, r, os.Getenv("HOME")+"/bin/gopokerclient.wasm")
 		})))
 	mux.Handle(bp+"/session", middleware(http.HandlerFunc(Session)))
 	// Websocket backend proxying

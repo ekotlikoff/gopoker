@@ -1,4 +1,4 @@
-package chessserver
+package tableserver
 
 import (
 	"sync"

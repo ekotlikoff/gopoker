@@ -1,0 +1,4 @@
+{
+	"TLS": true,
+	"ClientTimeout": "15s"
+}
