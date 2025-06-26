@@ -7,13 +7,12 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"strconv"
 	"time"
 
 	model "github.com/ekotlikoff/gopoker/internal/model/table"
+	tableserver "github.com/ekotlikoff/gopoker/internal/server/backend"
 	"github.com/gofrs/uuid"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
@@ -96,9 +95,9 @@ type (
 	// Gateway is the server that serves static files and proxies to the different
 	// backends
 	Gateway struct {
-		WSBackend *url.URL
-		BasePath  string
-		Port      int
+		TableServer tableserver.TableServer
+		BasePath    string
+		Port        int
 	}
 
 	// Credentials for authentication
@@ -111,12 +110,6 @@ type (
 func (gw *Gateway) Serve() {
 	cleanupChan := make(chan struct{})
 	setupRateLimiter(cleanupChan)
-	wsBackendProxy := httputil.NewSingleHostReverseProxy(gw.WSBackend)
-	wsBackendProxy.ModifyResponse = func(res *http.Response) error {
-		gatewayResponseMetric.WithLabelValues(
-			res.Request.URL.Path, res.Request.Method, res.Status).Inc()
-		return nil
-	}
 	mux := http.NewServeMux()
 	bp := gw.BasePath
 	if len(bp) > 0 && (bp[len(bp)-1:] == "/" || bp[0:1] != "/") {
@@ -131,8 +124,8 @@ func (gw *Gateway) Serve() {
 			http.ServeFile(w, r, os.Getenv("HOME")+"/bin/gopokerclient.wasm")
 		})))
 	mux.Handle(bp+"/session", middleware(http.HandlerFunc(Session)))
-	// Websocket backend proxying
-	mux.Handle(bp+"/ws", wsBackendProxy)
+	mux.Handle(bp+"/tables", middleware(http.HandlerFunc(gw.Tables)))
+	// TODO mux.Handle(bp+"/ws", middleware(http.HandlerFunc(Websocket)))
 	// Prometheus metrics endpoint
 	mux.Handle(bp+"/metrics", middleware(
 		promhttp.Handler()))
@@ -168,6 +161,16 @@ func (gw *Gateway) handleWebRoot(w http.ResponseWriter, r *http.Request) {
 	http.FileServer(http.FS(webStaticFS)).ServeHTTP(w, r)
 }
 
+func (gw *Gateway) Tables(w http.ResponseWriter, r *http.Request) {
+	tables := gw.TableServer.GetTables()
+	panic("unimplemented")
+	// TODO make tables serializable
+	if err := json.NewEncoder(w).Encode(tables); err != nil {
+		log.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
 // Session credit to https://www.sohamkamani.com/blog/2018/03/25/golang-session-authentication/
 func Session(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
@@ -191,9 +194,17 @@ func getSession(w http.ResponseWriter, r *http.Request) {
 			Credentials: Credentials{Username: player.Name},
 		}
 	} else {
+		table := player.GetTable()
 		currentMatchResponse = SessionResponse{
 			Credentials: Credentials{Username: player.Name},
-			InMatch:     true,
+			AtTable:     true,
+			Table: CurrentTable{
+				TableConfig: table.TableConfig,
+				Players:     table.Players,
+				DealerIndex: table.DealerIndex,
+				Standers:    table.Standers,
+				Hand:        table.Hand,
+			},
 		}
 	}
 	if err := json.NewEncoder(w).Encode(currentMatchResponse); err != nil {
@@ -287,14 +298,19 @@ func GetSession(w http.ResponseWriter, r *http.Request) *model.Player {
 }
 
 // CurrentMatch serializable struct to bring client up to speed
-type CurrentMatch struct {
+type CurrentTable struct {
+	TableConfig model.TableConfig
+	Players     [model.MaxTableSize]*model.Player
+	DealerIndex int
+	Standers    map[string]*model.Player
+	Hand        *model.Hand
 }
 
 // SessionResponse serializable struct to send client's session
 type SessionResponse struct {
 	Credentials Credentials
-	InMatch     bool
-	Match       CurrentMatch
+	AtTable     bool
+	Table       CurrentTable
 }
 
 type statusWriter struct {

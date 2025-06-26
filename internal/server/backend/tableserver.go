@@ -210,6 +210,13 @@ func NewTableServerWithTime(c clock) *TableServer {
 	}
 }
 
+// GetTables gets all the current tables
+func (ts *TableServer) GetTables() map[string]*Table {
+	ts.mutex.Lock()
+	defer ts.mutex.Unlock()
+	return ts.tables
+}
+
 // SendTableAction sends the TableServer an action.
 func (ts *TableServer) SendTableAction(a TableAction) {
 	ts.tableActions <- a
