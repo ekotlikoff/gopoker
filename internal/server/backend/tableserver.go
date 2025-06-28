@@ -40,19 +40,25 @@ const (
 	// NewHandUpdateT is the newest hand, and the player's hand.
 	NewHandUpdateT = PlayerUpdateType(iota)
 	// RoundUpdateT is the most recent RoundAction made by an opponent.
-	RoundUpdateT = PlayerUpdateType(iota)
+	RoundUpdateT
 	// BetUpdateT is a notification to the current better that the table is awaiting their bet.
-	BetUpdateT = PlayerUpdateType(iota)
+	BetUpdateT
 	// DealUpdateT is the new set of community cards.
-	DealUpdateT = PlayerUpdateType(iota)
+	DealUpdateT
 	// HandOverUpdateT is the result of the latest hand.
-	HandOverUpdateT = PlayerUpdateType(iota)
+	HandOverUpdateT
 	// FullUpdateT is the full update including the entire table's state.
-	FullUpdateT = PlayerUpdateType(iota)
+	FullUpdateT
 	// TableUpdateT is a table action e.g. a pause, somewhat standing up, etc.
-	TableUpdateT = PlayerUpdateType(iota)
+	TableUpdateT
 	// StateUpdateT is an update to table state - table no longer playing, etc.
-	StateUpdateT = PlayerUpdateType(iota)
+	StateUpdateT
+)
+
+// Types of updates that can be sent from a client.
+const (
+	RoundActionT = PlayerRequestType(iota)
+	TableActionT
 )
 
 type (
@@ -79,6 +85,14 @@ type (
 		PlayStopped bool
 		NowStanding []string
 	}
+	// PlayerRequestType is the type of reqeuest sent from the client.
+	PlayerRequestType int
+	// PlayerRequest are the requests players send to the server.
+	PlayerRequest struct {
+		PlayerRequestType PlayerRequestType
+		RoundAction       model.RoundAction
+		TableAction       TableAction
+	}
 	// PlayerUpdateType is the type of table update sent to a client.
 	PlayerUpdateType int
 	// PlayerUpdate includes the various kinds of updates sent to a client.
@@ -99,8 +113,8 @@ type (
 		RoundAction model.RoundAction
 		// CurrentBetter is the player that made the round action.
 		CurrentBetter string
-		// Table is the full model.Table.
-		Table model.Table
+		// Table contains the full table state, sent upon first connection.
+		Table SerializableTable
 		// TableAction is a table action that may be relevant to a client.
 		TableAction TableAction
 		// StateUpdate is an update to the table's state
@@ -160,10 +174,11 @@ type (
 
 	// TableAction is a player's request to the table outside the scope of a given round.
 	TableAction struct {
-		tableActionType TableActionType
-		tableName       string
-		seat            int
-		tableConfig     TableConfig
+		TableActionType TableActionType
+		TableName       string
+		Seat            int
+		TableConfig     TableConfig
+		PlayerName      string
 		player          *Player
 	}
 
@@ -259,8 +274,9 @@ func (ts *TableServer) newTable(name string, config TableConfig, creator string)
 // JoinTableAction makes a Join action.
 func JoinTableAction(t string, p *Player) TableAction {
 	return TableAction{
-		tableActionType: Join,
-		tableName:       t,
+		TableActionType: Join,
+		TableName:       t,
+		PlayerName:      p.GetName(),
 		player:          p,
 	}
 }
@@ -268,18 +284,20 @@ func JoinTableAction(t string, p *Player) TableAction {
 // SitTableAction makes a Sit action.
 func SitTableAction(t string, p *Player, s int) TableAction {
 	return TableAction{
-		tableActionType: Sit,
-		tableName:       t,
+		TableActionType: Sit,
+		TableName:       t,
+		PlayerName:      p.GetName(),
 		player:          p,
-		seat:            s,
+		Seat:            s,
 	}
 }
 
 // StandTableAction makes a Stand action.
 func StandTableAction(t string, p *Player) TableAction {
 	return TableAction{
-		tableActionType: Stand,
-		tableName:       t,
+		TableActionType: Stand,
+		TableName:       t,
+		PlayerName:      p.GetName(),
 		player:          p,
 	}
 }
@@ -287,9 +305,10 @@ func StandTableAction(t string, p *Player) TableAction {
 // CreateTableAction makes a Create action.
 func CreateTableAction(t string, p *Player) TableAction {
 	return TableAction{
-		tableActionType: Create,
-		tableName:       t,
-		tableConfig:     defaultTableConfig(),
+		TableActionType: Create,
+		TableName:       t,
+		TableConfig:     defaultTableConfig(),
+		PlayerName:      p.GetName(),
 		player:          p,
 	}
 }
@@ -297,8 +316,9 @@ func CreateTableAction(t string, p *Player) TableAction {
 // StartTableAction starts the table.
 func StartTableAction(t string, p *Player) TableAction {
 	return TableAction{
-		tableActionType: Start,
-		tableName:       t,
+		TableActionType: Start,
+		TableName:       t,
+		PlayerName:      p.GetName(),
 		player:          p,
 	}
 }
@@ -306,8 +326,9 @@ func StartTableAction(t string, p *Player) TableAction {
 // PauseTableAction pauses the table.
 func PauseTableAction(t string, p *Player) TableAction {
 	return TableAction{
-		tableActionType: Pause,
-		tableName:       t,
+		TableActionType: Pause,
+		TableName:       t,
+		PlayerName:      p.GetName(),
 		player:          p,
 	}
 }
@@ -315,8 +336,9 @@ func PauseTableAction(t string, p *Player) TableAction {
 // UnpauseTableAction unpauses the table.
 func UnpauseTableAction(t string, p *Player) TableAction {
 	return TableAction{
-		tableActionType: Unpause,
-		tableName:       t,
+		TableActionType: Unpause,
+		TableName:       t,
+		PlayerName:      p.GetName(),
 		player:          p,
 	}
 }
@@ -325,11 +347,11 @@ func UnpauseTableAction(t string, p *Player) TableAction {
 func (ts *TableServer) Serve() {
 	for a := range ts.tableActions {
 		var err error
-		switch a.tableActionType {
+		switch a.TableActionType {
 		case Create:
 			err = ts.newTable(
-				a.tableName,
-				a.tableConfig,
+				a.TableName,
+				a.TableConfig,
 				a.player.playerModel.Name,
 			)
 		case Stand:
@@ -341,14 +363,14 @@ func (ts *TableServer) Serve() {
 			ts.mutex.Lock()
 			p := a.player
 			var table *Table
-			if table = ts.tables[a.tableName]; table == nil {
+			if table = ts.tables[a.TableName]; table == nil {
 				p.tableResponseChan <- TableActionResponse{
-					fmt.Errorf("no table %q", a.tableName),
+					fmt.Errorf("no table %q", a.TableName),
 				}
 				continue
 			}
 			err = table.table.SitDown(
-				a.player.playerModel, a.seat,
+				a.player.playerModel, a.Seat,
 			)
 			if err == nil {
 				p.table = table
@@ -365,9 +387,9 @@ func (ts *TableServer) Serve() {
 			ts.mutex.Unlock()
 		case Join:
 			ts.mutex.Lock()
-			err = fmt.Errorf("table %q does not exist", a.tableName)
+			err = fmt.Errorf("table %q does not exist", a.TableName)
 			for _, t := range ts.tables {
-				if t.name == a.tableName {
+				if t.name == a.TableName {
 					err = a.player.join(t)
 					break
 				}
@@ -381,10 +403,10 @@ func (ts *TableServer) Serve() {
 		case Pause:
 			// TODO who should be allowed to pause?
 			a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
-			ts.tables[a.tableName].pauseChan <- struct{}{}
+			ts.tables[a.TableName].pauseChan <- struct{}{}
 		case Unpause:
 			a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
-			ts.tables[a.tableName].unpauseChan <- struct{}{}
+			ts.tables[a.TableName].unpauseChan <- struct{}{}
 		case Refresh:
 			// TODO
 			log.Fatalf("not implemented")
@@ -546,10 +568,10 @@ func (t *Table) getTimeBetweenHands() time.Duration {
 
 func (ts *TableServer) start(a TableAction) error {
 	ts.mutex.Lock()
-	table, ok := ts.tables[a.tableName]
+	table, ok := ts.tables[a.TableName]
 	ts.mutex.Unlock()
 	if !ok {
-		return fmt.Errorf("no such table %q", a.tableName)
+		return fmt.Errorf("no such table %q", a.TableName)
 	} else if a.player.playerModel.Name != table.adminName {
 		return fmt.Errorf("%s is not the admin, %s is", a.player.playerModel.Name, table.adminName)
 	}
@@ -657,6 +679,13 @@ func newStateUpdate(playStopped bool, nowStanding []string) *PlayerUpdate {
 			PlayStopped: playStopped,
 			NowStanding: nowStanding,
 		},
+	}
+}
+
+func (p *Player) NewFullUpdate() *PlayerUpdate {
+	return &PlayerUpdate{
+		Type:  FullUpdateT,
+		Table: p.table.SerializableTable(p),
 	}
 }
 

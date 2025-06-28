@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"sync"
 	"time"
 
 	model "github.com/ekotlikoff/gopoker/internal/model/table"
@@ -378,16 +377,14 @@ func (gw *Gateway) Websocket(w http.ResponseWriter, r *http.Request) {
 	player.ClientConnectToPlayer()
 	defer player.ClientDisconnectFromPlayer()
 
-	playerMutex := &sync.Mutex{}
-
-	go readLoop(c, player, playerMutex, waitc)
-	writeLoop(c, player, playerMutex)
+	go readLoop(c, player, gw.TableServer, waitc)
+	writeLoop(c, player)
 	<-waitc
 	log.Println("Websocketserver disconnecting from client: " + player.GetName())
 }
 
-func writeLoop(c *websocket.Conn, player *tableserver.Player, playerMutex *sync.Mutex) {
-	if err := c.WriteJSON(player.GetTable().SerializableTable()); err != nil {
+func writeLoop(c *websocket.Conn, player *tableserver.Player) {
+	if err := c.WriteJSON(player.NewFullUpdate()); err != nil {
 		log.Println("Write error:", err)
 		return
 	}
@@ -413,18 +410,23 @@ func writeLoop(c *websocket.Conn, player *tableserver.Player, playerMutex *sync.
 	}
 }
 
-func readLoop(c *websocket.Conn, player *tableserver.Player, playerMutex *sync.Mutex, waitc chan struct{}) {
+func readLoop(c *websocket.Conn, player *tableserver.Player, ts *tableserver.TableServer, waitc chan struct{}) {
 	defer c.Close()
 	for {
-		var action model.RoundAction
-		if err := c.ReadJSON(&action); err != nil {
+		var req tableserver.PlayerRequest
+		if err := c.ReadJSON(&req); err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("Websocketserver read error: %v", err)
 			}
 			close(waitc)
 			return
 		}
-		player.SendRoundAction(action)
+		switch req.PlayerRequestType {
+		case tableserver.RoundActionT:
+			player.SendRoundAction(req.RoundAction)
+		case tableserver.TableActionT:
+			ts.SendTableAction(req.TableAction)
+		}
 	}
 }
 

@@ -222,6 +222,8 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 
 func (c *Client) renderFullTable(table model.Table) {
 	// Render the full table state
+	// TODO remove sit buttons for any seated player, or if our player is seated.
+	// TODO init button listeners for remaining buttons
 }
 
 func (c *Client) send(action interface{}) {
