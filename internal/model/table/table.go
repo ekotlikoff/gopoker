@@ -29,12 +29,20 @@ const (
 )
 
 type (
-	// SerializableTable is a struct designed for JSON serialization, providing a public-facing representation of a table's state.
-	SerializableTable struct {
+	// TableSummary is a summary of a table for listing them in the UI.
+	TableSummary struct {
 		Name         string
 		PlayerCount  int
 		StanderCount int
 		IsPlaying    bool
+	}
+	// SerializableTable is the serializable version of a Table, containing all information a client needs.
+	SerializableTable struct {
+		TableConfig TableConfig
+		Players     [MaxTableSize]*Player
+		DealerIndex int
+		Standers    map[string]*Player
+		Hand        *Hand
 	}
 )
 
@@ -141,6 +149,35 @@ func (t *Table) playersForHand() (*ring.Ring, Pot) {
 		out = out.Next()
 	}
 	return out.Prev(), Pot{MainPot: mainPot, SidePots: []SubPot{}}
+}
+
+// SerializableTable generates a SerializableTable copy from the Table.
+func (t *Table) SerializableTable(name string) SerializableTable {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	var playersCopy [MaxTableSize]*Player
+	for i, p := range t.Players {
+		if p != nil {
+			pCopy := *p
+			playersCopy[i] = &pCopy
+			if pCopy.Name != name {
+				// Obfuscate the player's hand, if it isn't the current player's.
+				pCopy.Hole = nil
+			}
+		}
+	}
+	standersCopy := make(map[string]*Player)
+	for n, p := range t.Standers {
+		pCopy := *p
+		standersCopy[n] = &pCopy
+	}
+	return SerializableTable{
+		TableConfig: t.TableConfig,
+		Players:     playersCopy,
+		DealerIndex: t.DealerIndex,
+		Standers:    standersCopy,
+		Hand:        t.Hand,
+	}
 }
 
 // StartHand starts a hand

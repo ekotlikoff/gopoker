@@ -39,7 +39,7 @@ type Client struct {
 	client   *http.Client
 	conn     js.Value // WebSocket connection
 	player   *model.Player
-	tables   []model.SerializableTable
+	tables   []model.TableSummary
 }
 
 func main() {
@@ -191,8 +191,9 @@ func (c *Client) connect(tableName string) {
 		protocol = "wss"
 	}
 	host := js.Global().Get("location").Get("host").String()
+	pathname := js.Global().Get("location").Get("pathname").String()
 
-	c.conn = js.Global().Get("WebSocket").New(protocol + "://" + host + "/ws?table=" + tableName)
+	c.conn = js.Global().Get("WebSocket").New(protocol + "://" + host + pathname + "ws?table=" + tableName)
 	if c.conn.IsUndefined() {
 		return
 	}

@@ -122,6 +122,16 @@ type (
 		table *Table
 		// Only one client connected to the player at a time
 		mutex sync.Mutex
+		// True if there is a client connected to the player.
+		connected bool
+	}
+	// SerializableTable is a serializable version of the table that contains information clients need.
+	SerializableTable struct {
+		Name        string
+		TableConfig TableConfig
+		AdminName   string
+		Table       model.SerializableTable
+		Playing     bool
 	}
 	// Table is an instance of an ongoing game the TableServer is hosting.
 	Table struct {
@@ -415,6 +425,20 @@ func (p *Player) GetRoundResponse() RoundActionResponse {
 	return <-p.responseChan
 }
 
+// ClientConnectToPlayer connects a client to the player.
+func (p *Player) ClientConnectToPlayer() {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.connected = true
+}
+
+// ClientDisconnectFromPlayer disconnects a client from the player.
+func (p *Player) ClientDisconnectFromPlayer() {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.connected = false
+}
+
 func (p *Player) join(t *Table) error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
@@ -456,6 +480,20 @@ func (t *Table) TableConfig() TableConfig {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	return t.tableConfig
+}
+
+// SerializableTable creates a serializable version of the table state for a player, with only the information that player needs.
+func (t *Table) SerializableTable(p *Player) SerializableTable {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	// TODO remove details of other players hands that this player should not know.
+	return SerializableTable{
+		Name:        t.name,
+		TableConfig: t.tableConfig,
+		AdminName:   t.adminName,
+		Table:       t.table.SerializableTable(p.GetName()),
+		Playing:     t.playing,
+	}
 }
 
 func (t *Table) DealerIndex() int {

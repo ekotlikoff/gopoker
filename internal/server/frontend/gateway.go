@@ -1,19 +1,23 @@
 package gateway
 
 import (
+	"bufio"
 	"embed"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	model "github.com/ekotlikoff/gopoker/internal/model/table"
 	tableserver "github.com/ekotlikoff/gopoker/internal/server/backend"
 	"github.com/gofrs/uuid"
+	"github.com/gorilla/websocket"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -23,7 +27,14 @@ const (
 	acceptableRequestPeriodMS   = 100
 	maxBurstOfRequests          = 10
 	maxTimeToWaitForRateLimiter = 2 * time.Second
+	// Time allowed to read the next pong message from the peer.
+	pongWait = 5 * time.Second
+
+	// Send pings to peer with this period. Must be less than pongWait.
+	pingPeriod = (pongWait * 7) / 10
 )
+
+var upgrader = websocket.Upgrader{}
 
 var (
 	sessionCache *TTLMap
@@ -125,7 +136,7 @@ func (gw *Gateway) Serve() {
 		})))
 	mux.Handle(bp+"/session", middleware(http.HandlerFunc(Session)))
 	mux.Handle(bp+"/tables", middleware(http.HandlerFunc(gw.Tables)))
-	// TODO mux.Handle(bp+"/ws", middleware(http.HandlerFunc(Websocket)))
+	mux.Handle(bp+"/ws", middleware(http.HandlerFunc(gw.Websocket)))
 	// Prometheus metrics endpoint
 	mux.Handle(bp+"/metrics", middleware(
 		promhttp.Handler()))
@@ -173,17 +184,17 @@ func (gw *Gateway) Tables(w http.ResponseWriter, r *http.Request) {
 }
 
 func (gw *Gateway) getTables(w http.ResponseWriter, r *http.Request) {
-	tables := gw.TableServer.GetTables()
-	serializableTables := make([]model.SerializableTable, 0, len(tables))
-	for name, table := range tables {
-		serializableTables = append(serializableTables, model.SerializableTable{
+	ts := gw.TableServer.GetTables()
+	tableSummaries := make([]model.TableSummary, 0, len(ts))
+	for name, table := range ts {
+		tableSummaries = append(tableSummaries, model.TableSummary{
 			Name:         name,
 			PlayerCount:  table.PlayerCount(),
 			StanderCount: table.StanderCount(),
 			IsPlaying:    table.IsPlaying(),
 		})
 	}
-	if err := json.NewEncoder(w).Encode(serializableTables); err != nil {
+	if err := json.NewEncoder(w).Encode(tableSummaries); err != nil {
 		log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
@@ -231,6 +242,13 @@ func (gw *Gateway) createTable(w http.ResponseWriter, r *http.Request) {
 	action := tableserver.CreateTableAction(req.Name, player)
 	gw.TableServer.SendTableAction(action)
 	resp := player.GetTableResponse()
+	if resp.Err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(resp.Err.Error()))
+		return
+	}
+	gw.TableServer.SendTableAction(tableserver.JoinTableAction(req.Name, player))
+	resp = player.GetTableResponse()
 	if resp.Err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(resp.Err.Error()))
@@ -334,6 +352,80 @@ type statusWriter struct {
 func (w *statusWriter) WriteHeader(status int) {
 	w.status = status
 	w.ResponseWriter.WriteHeader(status)
+}
+
+// Hijack the connection
+func (w *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return w.ResponseWriter.(http.Hijacker).Hijack()
+}
+
+func (gw *Gateway) Websocket(w http.ResponseWriter, r *http.Request) {
+	player := GetSession(w, r)
+	if player == nil {
+		log.Println("No player found for session")
+		return
+	}
+
+	c, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println("Upgrade error:", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	defer c.Close()
+
+	waitc := make(chan struct{})
+	player.ClientConnectToPlayer()
+	defer player.ClientDisconnectFromPlayer()
+
+	playerMutex := &sync.Mutex{}
+
+	go readLoop(c, player, playerMutex, waitc)
+	writeLoop(c, player, playerMutex)
+	<-waitc
+	log.Println("Websocketserver disconnecting from client: " + player.GetName())
+}
+
+func writeLoop(c *websocket.Conn, player *tableserver.Player, playerMutex *sync.Mutex) {
+	if err := c.WriteJSON(player.GetTable().SerializableTable()); err != nil {
+		log.Println("Write error:", err)
+		return
+	}
+	ticker := time.NewTicker(pingPeriod)
+	defer ticker.Stop()
+
+	for {
+		var update *tableserver.PlayerUpdate
+		select {
+		case update = <-player.TableUpdateChan:
+		case <-ticker.C:
+			if err := c.WriteMessage(websocket.PingMessage, nil); err != nil {
+				log.Println("FATAL Write PingMessage error:", err)
+				return
+			}
+			continue
+		}
+
+		if err := c.WriteJSON(update); err != nil {
+			log.Println("Write error:", err)
+			return
+		}
+	}
+}
+
+func readLoop(c *websocket.Conn, player *tableserver.Player, playerMutex *sync.Mutex, waitc chan struct{}) {
+	defer c.Close()
+	for {
+		var action model.RoundAction
+		if err := c.ReadJSON(&action); err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("Websocketserver read error: %v", err)
+			}
+			close(waitc)
+			return
+		}
+		player.SendRoundAction(action)
+	}
 }
 
 // rateLimiterMiddleware handles the request by first blocking until the rate

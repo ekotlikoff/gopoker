@@ -90,6 +90,7 @@ type (
 
 	// CurrentMatch serializable struct to bring client up to speed
 	CurrentTable struct {
+		Name        string
 		TableConfig model.TableConfig
 		Players     [model.MaxTableSize]*model.Player
 		DealerIndex int
