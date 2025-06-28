@@ -421,7 +421,7 @@ func readLoop(c *websocket.Conn, player *tableserver.Player, ts *tableserver.Tab
 			close(waitc)
 			return
 		}
-		switch req.PlayerRequestType {
+		switch req.Type {
 		case tableserver.RoundActionT:
 			player.SendRoundAction(req.RoundAction)
 		case tableserver.TableActionT:

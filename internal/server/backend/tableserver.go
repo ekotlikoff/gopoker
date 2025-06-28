@@ -89,9 +89,9 @@ type (
 	PlayerRequestType int
 	// PlayerRequest are the requests players send to the server.
 	PlayerRequest struct {
-		PlayerRequestType PlayerRequestType
-		RoundAction       model.RoundAction
-		TableAction       TableAction
+		Type        PlayerRequestType
+		RoundAction model.RoundAction
+		TableAction TableAction
 	}
 	// PlayerUpdateType is the type of table update sent to a client.
 	PlayerUpdateType int
