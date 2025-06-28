@@ -95,7 +95,7 @@ type (
 	// Gateway is the server that serves static files and proxies to the different
 	// backends
 	Gateway struct {
-		TableServer tableserver.TableServer
+		TableServer *tableserver.TableServer
 		BasePath    string
 		Port        int
 	}
@@ -162,21 +162,90 @@ func (gw *Gateway) handleWebRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (gw *Gateway) Tables(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		gw.getTables(w, r)
+	case http.MethodPost:
+		gw.createTable(w, r)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (gw *Gateway) getTables(w http.ResponseWriter, r *http.Request) {
 	tables := gw.TableServer.GetTables()
-	panic("unimplemented")
-	// TODO make tables serializable
-	if err := json.NewEncoder(w).Encode(tables); err != nil {
+	serializableTables := make([]model.SerializableTable, 0, len(tables))
+	for name, table := range tables {
+		serializableTables = append(serializableTables, model.SerializableTable{
+			Name:         name,
+			PlayerCount:  table.PlayerCount(),
+			StanderCount: table.StanderCount(),
+			IsPlaying:    table.IsPlaying(),
+		})
+	}
+	if err := json.NewEncoder(w).Encode(serializableTables); err != nil {
 		log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
+}
+
+func (gw *Gateway) createTable(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name     string `json:"name"`
+		Username string `json:"username"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	player := getPlayerFromSession(r)
+
+	if player == nil {
+		if req.Username == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("Missing username"))
+			return
+		}
+		sessionToken, err := uuid.NewV4()
+		if err != nil {
+			log.Println("Failed to generate session token")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		sessionTokenStr := sessionToken.String()
+		player = tableserver.NewPlayer(req.Username)
+		err = sessionCache.Put(sessionTokenStr, player)
+		if err != nil {
+			log.Println("Failed to store session token in sessionCache")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		http.SetCookie(w, &http.Cookie{
+			Name:    "session_token",
+			Value:   sessionTokenStr,
+			Expires: time.Now().Add(1800 * time.Second),
+		})
+	}
+
+	action := tableserver.CreateTableAction(req.Name, player)
+	gw.TableServer.SendTableAction(action)
+	resp := player.GetTableResponse()
+	if resp.Err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(resp.Err.Error()))
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
 }
 
 // Session credit to https://www.sohamkamani.com/blog/2018/03/25/golang-session-authentication/
 func Session(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		getSession(w, r)
-	} else if r.Method == http.MethodPost {
-		newSession(w, r)
+	} else {
+		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
 
@@ -189,21 +258,21 @@ func getSession(w http.ResponseWriter, r *http.Request) {
 	if player == nil {
 		return
 	} else if player.GetTable() == nil {
-		log.Println("Found session,", player.Name)
+		log.Println("Found session,", player.GetName())
 		currentMatchResponse = SessionResponse{
-			Credentials: Credentials{Username: player.Name},
+			Credentials: Credentials{Username: player.GetName()},
 		}
 	} else {
 		table := player.GetTable()
 		currentMatchResponse = SessionResponse{
-			Credentials: Credentials{Username: player.Name},
+			Credentials: Credentials{Username: player.GetName()},
 			AtTable:     true,
 			Table: CurrentTable{
-				TableConfig: table.TableConfig,
-				Players:     table.Players,
-				DealerIndex: table.DealerIndex,
-				Standers:    table.Standers,
-				Hand:        table.Hand,
+				TableConfig: table.TableConfig(),
+				Players:     table.Players(),
+				DealerIndex: table.DealerIndex(),
+				Standers:    table.Standers(),
+				Hand:        table.Hand(),
 			},
 		}
 	}
@@ -213,93 +282,36 @@ func getSession(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func newSession(w http.ResponseWriter, r *http.Request) {
-	tracer := opentracing.GlobalTracer()
-	SessionSpan := tracer.StartSpan("POSTSession")
-	defer SessionSpan.Finish()
-	var creds Credentials
-	err := json.NewDecoder(r.Body).Decode(&creds)
-	if err != nil {
-		log.Println("Bad request", err)
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	} else if creds.Username == "" {
-		log.Println("Missing username")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Missing username"))
-		return
-	}
-	newTokenSpan := tracer.StartSpan(
-		"NewToken",
-		opentracing.ChildOf(SessionSpan.Context()),
-	)
-	sessionToken, err := uuid.NewV4()
-	newTokenSpan.Finish()
-	if err != nil {
-		log.Println("Failed to generate session token")
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	sessionTokenStr := sessionToken.String()
-	newPlayerSpan := tracer.StartSpan(
-		"NewPlayer",
-		opentracing.ChildOf(SessionSpan.Context()),
-	)
-	player := model.NewPlayer(creds.Username)
-	newPlayerSpan.Finish()
-	log.Println("Adding to sessionCache,", creds.Username)
-	err = sessionCache.Put(sessionTokenStr, player)
-	if err != nil {
-		log.Println("Failed to store session token in sessionCache")
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name:    "session_token",
-		Value:   sessionTokenStr,
-		Expires: time.Now().Add(1800 * time.Second),
-	})
-}
-
-// GetSession credit to https://www.sohamkamani.com/blog/2018/03/25/golang-session-authentication/
-func GetSession(w http.ResponseWriter, r *http.Request) *model.Player {
-	tracer := opentracing.GlobalTracer()
-	getSessionSpan := tracer.StartSpan("GetSession")
-	defer getSessionSpan.Finish()
+func getPlayerFromSession(r *http.Request) *tableserver.Player {
 	c, err := r.Cookie("session_token")
 	if err != nil {
-		if err == http.ErrNoCookie {
-			log.Println("session_token is not set")
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte("Missing session_token"))
-			return nil
-		}
-		log.Println("ERROR", err)
-		w.WriteHeader(http.StatusBadRequest)
 		return nil
 	}
 	sessionToken := c.Value
-	getTokenSpan := tracer.StartSpan(
-		"GetToken",
-		opentracing.ChildOf(getSessionSpan.Context()),
-	)
 	player, err := sessionCache.Get(sessionToken)
-	getTokenSpan.Finish()
 	if err != nil {
-		log.Println("ERROR token is invalid")
-		w.WriteHeader(http.StatusUnauthorized)
+		log.Println("ERROR token is invalid in cache:", err)
 		return nil
-	} else if player == nil {
-		log.Println("No player found for token ", sessionToken)
+	}
+	return player
+}
+
+// GetSession credit to https://www.sohamkamani.com/blog/2018/03/25/golang-session-authentication/
+func GetSession(w http.ResponseWriter, r *http.Request) *tableserver.Player {
+	tracer := opentracing.GlobalTracer()
+	getSessionSpan := tracer.StartSpan("GetSession")
+	defer getSessionSpan.Finish()
+	player := getPlayerFromSession(r)
+	if player == nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		return nil
+		w.Write([]byte("Missing session_token"))
 	}
 	return player
 }
 
 // CurrentMatch serializable struct to bring client up to speed
 type CurrentTable struct {
-	TableConfig model.TableConfig
+	TableConfig tableserver.TableConfig
 	Players     [model.MaxTableSize]*model.Player
 	DealerIndex int
 	Standers    map[string]*model.Player

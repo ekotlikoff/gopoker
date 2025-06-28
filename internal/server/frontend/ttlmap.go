@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
-	model "github.com/ekotlikoff/gopoker/internal/model/table"
+	tableserver "github.com/ekotlikoff/gopoker/internal/server/backend"
 )
 
 type item struct {
-	value      *model.Player
+	value      *tableserver.Player
 	lastAccess int64
 }
 
@@ -47,7 +47,7 @@ func (m *TTLMap) Len() int {
 }
 
 // Put puts key k and value v
-func (m *TTLMap) Put(k string, v *model.Player) error {
+func (m *TTLMap) Put(k string, v *tableserver.Player) error {
 	m.l.Lock()
 	_, ok := m.m[k]
 	var it item
@@ -55,7 +55,7 @@ func (m *TTLMap) Put(k string, v *model.Player) error {
 		it := &item{value: v}
 		m.m[k] = it
 	} else {
-		return errors.New("failed to put key: " + k + ", value: " + v.Name)
+		return errors.New("failed to put key: " + k + ", value: " + v.GetName())
 	}
 	it.lastAccess = time.Now().Unix()
 	m.l.Unlock()
@@ -63,7 +63,7 @@ func (m *TTLMap) Put(k string, v *model.Player) error {
 }
 
 // Get gets value for key k
-func (m *TTLMap) Get(k string) (v *model.Player, err error) {
+func (m *TTLMap) Get(k string) (v *tableserver.Player, err error) {
 	m.l.Lock()
 	if it, ok := m.m[k]; ok {
 		v = it.value

@@ -29,6 +29,16 @@ const (
 )
 
 type (
+	// SerializableTable is a struct designed for JSON serialization, providing a public-facing representation of a table's state.
+	SerializableTable struct {
+		Name         string
+		PlayerCount  int
+		StanderCount int
+		IsPlaying    bool
+	}
+)
+
+type (
 	// Player a player's state at a Table
 	Player struct {
 		Name          string

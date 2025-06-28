@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net/url"
 	"os"
-	"strconv"
 
 	// Blank import to embed config.json
 	_ "embed"
@@ -60,12 +58,10 @@ func RunServerWithConfig(config Configuration) {
 	configureLogging(config)
 	ts := tableserver.NewTableServer()
 	go ts.Serve()
-	websocketURL, _ := url.Parse("http://localhost:" +
-		strconv.Itoa(config.WSPort))
 	gw := gateway.Gateway{
-		WSBackend: websocketURL,
-		BasePath:  config.BasePath,
-		Port:      config.GatewayPort,
+		TableServer: ts,
+		BasePath:    config.BasePath,
+		Port:        config.GatewayPort,
 	}
 	gw.Serve()
 }

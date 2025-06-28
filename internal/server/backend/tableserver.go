@@ -386,6 +386,13 @@ func (ts *TableServer) Serve() {
 	}
 }
 
+// GetName get's the player's name.
+func (p *Player) GetName() string {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	return p.playerModel.Name
+}
+
 // GetTable get's the player's current table.
 func (p *Player) GetTable() *Table {
 	p.mutex.Lock()
@@ -421,10 +428,58 @@ func (p *Player) join(t *Table) error {
 	return err
 }
 
-func (t *Table) isPlaying() bool {
+func (t *Table) IsPlaying() bool {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	return t.playing
+}
+
+func (t *Table) Players() [model.MaxTableSize]*model.Player {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.table.Players
+}
+
+func (t *Table) Standers() map[string]*model.Player {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.table.Standers
+}
+
+func (t *Table) Hand() *model.Hand {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.table.Hand
+}
+
+func (t *Table) TableConfig() TableConfig {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.tableConfig
+}
+
+func (t *Table) DealerIndex() int {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.table.DealerIndex
+}
+
+func (t *Table) PlayerCount() int {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	count := 0
+	for _, p := range t.table.Players {
+		if p != nil {
+			count++
+		}
+	}
+	return count
+}
+
+func (t *Table) StanderCount() int {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return len(t.table.Standers)
 }
 
 func (t *Table) setPlaying(p bool) {
@@ -478,7 +533,7 @@ func (t *Table) bigBlindAmount() int {
 }
 
 func (ts *TableServer) serveTable(t *Table) error {
-	if t.isPlaying() {
+	if t.IsPlaying() {
 		return errors.New("play: table already playing")
 	}
 	t.setPlaying(true)
