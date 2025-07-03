@@ -18,13 +18,15 @@ import (
 const (
 	// DefaultMinBet default minimum bet controlling big blinds
 	DefaultMinBet = 200
+	// DefaultFunds default funds for a player joining the table
+	DefaultFunds = 100 * DefaultMinBet
 	// MinPlayersToPlay below which the hand cannot start
 	MinPlayersToPlay = 2
 	// MaxTableSize once reached no more players can sit
 	MaxTableSize = 10
 	// MaxStandersSize in conjunction with MaxTableSize defines the maximum number of players at a table.
 	// There can be up to MaxStandersSize + MaxTableSize standers at a table, but once there are a total
-	// of MaxStandersSize + MaxTableSize players at a table no more players may join.
+	// of MaxStandersSize + MaxTableSize players at a table no more players may join
 	MaxStandersSize = 10
 )
 
@@ -79,14 +81,16 @@ type (
 
 	// TableConfig define nuances of the game played at a Table
 	TableConfig struct {
-		minBet int
+		minBet       int
+		defaultFunds int
 	}
 )
 
 // DefaultConfig creates a default TableConfig.
 func DefaultConfig() TableConfig {
 	return TableConfig{
-		minBet: DefaultMinBet,
+		minBet:       DefaultMinBet,
+		defaultFunds: DefaultFunds,
 	}
 }
 
@@ -212,6 +216,10 @@ func (t *Table) Join(p *Player) error {
 	}
 	t.Standers[p.Name] = p
 	p.table = t
+	p.Standing = true
+	if p.Funds < t.TableConfig.defaultFunds {
+		p.Funds = t.TableConfig.defaultFunds
+	}
 	return nil
 }
 
@@ -219,13 +227,17 @@ func (t *Table) Join(p *Player) error {
 func (t *Table) SitDown(p *Player, seat int) error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	if p.Funds < t.TableConfig.minBet {
+	if p.Standing != true {
+		return fmt.Errorf("Player already sitting")
+	} else if p.Funds < t.TableConfig.minBet {
 		return fmt.Errorf("Player has insufficient funds to sit (%d < %d)", p.Funds, t.TableConfig.minBet)
 	} else if seat >= MaxTableSize {
 		return errors.New("Seat, " + fmt.Sprint(seat) +
 			" is greater than max table size, " + fmt.Sprint(MaxTableSize))
 	} else if t.Players[seat] == nil {
 		t.Players[seat] = p
+		p.table = t
+		p.Standing = false
 		return nil
 	}
 	return errors.New("seat is occupied, " + fmt.Sprint(seat))

@@ -55,12 +55,6 @@ const (
 	StateUpdateT
 )
 
-// Types of updates that can be sent from a client.
-const (
-	RoundActionT = PlayerRequestType(iota)
-	TableActionT
-)
-
 type (
 	clock interface {
 		now() time.Time
@@ -84,14 +78,6 @@ type (
 	StateUpdate struct {
 		PlayStopped bool
 		NowStanding []string
-	}
-	// PlayerRequestType is the type of reqeuest sent from the client.
-	PlayerRequestType int
-	// PlayerRequest are the requests players send to the server.
-	PlayerRequest struct {
-		Type        PlayerRequestType
-		RoundAction model.RoundAction
-		TableAction TableAction
 	}
 	// PlayerUpdateType is the type of table update sent to a client.
 	PlayerUpdateType int
@@ -184,7 +170,8 @@ type (
 
 	// TableActionResponse is a resposne to a client's TableAction.
 	TableActionResponse struct {
-		Err error
+		Err         error
+		TableAction TableAction
 	}
 
 	// RoundActionResponse is a resposne to a client's RoundAction.
@@ -240,6 +227,11 @@ func (ts *TableServer) GetTables() map[string]*Table {
 	ts.mutex.Lock()
 	defer ts.mutex.Unlock()
 	return ts.tables
+}
+
+func (a *TableAction) SetPlayer(p *Player) *TableAction {
+	a.player = p
+	return a
 }
 
 // SendTableAction sends the TableServer an action.
@@ -366,6 +358,7 @@ func (ts *TableServer) Serve() {
 			if table = ts.tables[a.TableName]; table == nil {
 				p.tableResponseChan <- TableActionResponse{
 					fmt.Errorf("no table %q", a.TableName),
+					a,
 				}
 				continue
 			}
@@ -414,7 +407,7 @@ func (ts *TableServer) Serve() {
 				Type: FullUpdateT,
 			}
 		}
-		a.player.tableResponseChan <- TableActionResponse{err}
+		a.player.tableResponseChan <- TableActionResponse{err, a}
 	}
 }
 
@@ -430,6 +423,14 @@ func (p *Player) GetTable() *Table {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	return p.table
+}
+
+func (p *Player) TableResponseChan() <-chan TableActionResponse {
+	return p.tableResponseChan
+}
+
+func (p *Player) RoundResponseChan() <-chan RoundActionResponse {
+	return p.responseChan
 }
 
 // GetTableResponse gets a response from the table.

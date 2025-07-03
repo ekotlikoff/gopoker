@@ -26,11 +26,29 @@ const (
 	acceptableRequestPeriodMS   = 100
 	maxBurstOfRequests          = 10
 	maxTimeToWaitForRateLimiter = 2 * time.Second
-	// Time allowed to read the next pong message from the peer.
+	// Time allowed to read the next pong message from the peer
 	pongWait = 5 * time.Second
 
-	// Send pings to peer with this period. Must be less than pongWait.
+	// Send pings to peer with this period. Must be less than pongWait
 	pingPeriod = (pongWait * 7) / 10
+)
+
+// Types of updates that can be sent from a client
+const (
+	// RoundActionT is the PlayerRequestType corresponding to a RoundAction
+	RoundActionT = PlayerRequestType(iota)
+	// TableActionT is the PlayerRequestType corresponding to a TableAction
+	TableActionT
+)
+
+// Types of updates that can be sent to a client
+const (
+	// RoundActionResponseT is the ServerToPlayerType corresponding to a RoundAction
+	RoundActionResponseT = ServerToPlayerType(iota)
+	// TableActionResponseT is the ServerToPlayerType corresponding to a TableActionResponse
+	TableActionResponseT
+	// PlayerUpdateT is the ServerToPlayerType corresponding to a PlayerUpdate
+	PlayerUpdateT
 )
 
 var upgrader = websocket.Upgrader{}
@@ -113,6 +131,23 @@ type (
 	// Credentials for authentication
 	Credentials struct {
 		Username string
+	}
+	// ServerToPlayerT is the type of server to client comm
+	ServerToPlayerType int
+	// ServerToPlayer wraps the various types of communications that can be sent to the client
+	ServerToPlayer struct {
+		Type                ServerToPlayerType
+		RoundActionResponse tableserver.RoundActionResponse
+		TableActionResponse tableserver.TableActionResponse
+		PlayerUpdate        *tableserver.PlayerUpdate
+	}
+	// PlayerRequestType is the type of reqeuest sent from the client.
+	PlayerRequestType int
+	// PlayerRequest are the requests players send to the server.
+	PlayerRequest struct {
+		Type        PlayerRequestType
+		RoundAction model.RoundAction
+		TableAction tableserver.TableAction
 	}
 )
 
@@ -284,13 +319,7 @@ func getSession(w http.ResponseWriter, r *http.Request) {
 		currentMatchResponse = SessionResponse{
 			Credentials: Credentials{Username: player.GetName()},
 			AtTable:     true,
-			Table: CurrentTable{
-				TableConfig: table.TableConfig(),
-				Players:     table.Players(),
-				DealerIndex: table.DealerIndex(),
-				Standers:    table.Standers(),
-				Hand:        table.Hand(),
-			},
+			Table:       table.SerializableTable(player),
 		}
 	}
 	if err := json.NewEncoder(w).Encode(currentMatchResponse); err != nil {
@@ -326,20 +355,11 @@ func GetSession(w http.ResponseWriter, r *http.Request) *tableserver.Player {
 	return player
 }
 
-// CurrentMatch serializable struct to bring client up to speed
-type CurrentTable struct {
-	TableConfig tableserver.TableConfig
-	Players     [model.MaxTableSize]*model.Player
-	DealerIndex int
-	Standers    map[string]*model.Player
-	Hand        *model.Hand
-}
-
 // SessionResponse serializable struct to send client's session
 type SessionResponse struct {
 	Credentials Credentials
 	AtTable     bool
-	Table       CurrentTable
+	Table       tableserver.SerializableTable
 }
 
 type statusWriter struct {
@@ -384,7 +404,7 @@ func (gw *Gateway) Websocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeLoop(c *websocket.Conn, player *tableserver.Player) {
-	if err := c.WriteJSON(player.NewFullUpdate()); err != nil {
+	if err := c.WriteJSON(ServerToPlayer{Type: PlayerUpdateT, PlayerUpdate: player.NewFullUpdate()}); err != nil {
 		log.Println("Write error:", err)
 		return
 	}
@@ -392,9 +412,17 @@ func writeLoop(c *websocket.Conn, player *tableserver.Player) {
 	defer ticker.Stop()
 
 	for {
-		var update *tableserver.PlayerUpdate
+		var update ServerToPlayer
 		select {
-		case update = <-player.TableUpdateChan:
+		case u := <-player.TableUpdateChan:
+			update.Type = PlayerUpdateT
+			update.PlayerUpdate = u
+		case u := <-player.RoundResponseChan():
+			update.Type = RoundActionResponseT
+			update.RoundActionResponse = u
+		case u := <-player.TableResponseChan():
+			update.Type = TableActionResponseT
+			update.TableActionResponse = u
 		case <-ticker.C:
 			if err := c.WriteMessage(websocket.PingMessage, nil); err != nil {
 				log.Println("FATAL Write PingMessage error:", err)
@@ -413,7 +441,7 @@ func writeLoop(c *websocket.Conn, player *tableserver.Player) {
 func readLoop(c *websocket.Conn, player *tableserver.Player, ts *tableserver.TableServer, waitc chan struct{}) {
 	defer c.Close()
 	for {
-		var req tableserver.PlayerRequest
+		var req PlayerRequest
 		if err := c.ReadJSON(&req); err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("Websocketserver read error: %v", err)
@@ -422,10 +450,10 @@ func readLoop(c *websocket.Conn, player *tableserver.Player, ts *tableserver.Tab
 			return
 		}
 		switch req.Type {
-		case tableserver.RoundActionT:
+		case RoundActionT:
 			player.SendRoundAction(req.RoundAction)
-		case tableserver.TableActionT:
-			ts.SendTableAction(req.TableAction)
+		case TableActionT:
+			ts.SendTableAction(*req.TableAction.SetPlayer(player))
 		}
 	}
 }

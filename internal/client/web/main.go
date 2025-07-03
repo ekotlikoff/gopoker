@@ -10,6 +10,8 @@ import (
 	"net/http/cookiejar"
 	"syscall/js"
 
+	"github.com/chehsunliu/poker"
+
 	model "github.com/ekotlikoff/gopoker/internal/model/table"
 	tableserver "github.com/ekotlikoff/gopoker/internal/server/backend"
 	gateway "github.com/ekotlikoff/gopoker/internal/server/frontend"
@@ -20,6 +22,7 @@ type Client struct {
 	client   *http.Client
 	conn     js.Value // WebSocket connection
 	player   *model.Player
+	table    tableserver.SerializableTable
 	tables   []model.TableSummary
 }
 
@@ -136,6 +139,7 @@ func (c *Client) createTable(this js.Value, args []js.Value) interface{} {
 			// Handle error, e.g., show a message to the user
 			return
 		}
+		c.player = &model.Player{Name: username}
 		c.joinTable(tableName)
 	}()
 
@@ -187,24 +191,52 @@ func (c *Client) connect(tableName string) {
 
 func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 	message := args[0].Get("data").String()
-	var update tableserver.PlayerUpdate
+	var update gateway.ServerToPlayer
 	if err := json.Unmarshal([]byte(message), &update); err != nil {
 		return nil
 	}
 
 	switch update.Type {
-	case tableserver.FullUpdateT:
-		c.renderFullTable(update.Table)
-		// Add other cases here to handle different update types
+	case gateway.PlayerUpdateT:
+		switch update.PlayerUpdate.Type {
+		case tableserver.FullUpdateT:
+			c.renderFullTable(update.PlayerUpdate.Table)
+			c.table = update.PlayerUpdate.Table
+		case tableserver.NewHandUpdateT:
+			c.renderHoleCards(update.PlayerUpdate.Hole)
+		}
+	case gateway.TableActionResponseT:
+		// TODO check the action and if err is nil, update the UI accordingly.
 	}
 
 	return nil
 }
 
 func (c *Client) renderFullTable(table tableserver.SerializableTable) {
-	// Render the full table state
-	// TODO remove sit buttons for any seated player, or if our player is seated.
-	// TODO init button listeners for remaining buttons
+	for i, player := range table.Table.Players {
+		seatIndex := i // Capture the loop variable
+		seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
+		playerName := seat.Call("querySelector", ".player_name")
+		sitButton := seat.Call("querySelector", ".sit_down_button")
+
+		if player != nil {
+			playerName.Set("textContent", player.Name)
+			sitButton.Get("classList").Call("add", "hidden")
+		} else {
+			playerName.Set("textContent", "")
+			sitButton.Get("classList").Call("remove", "hidden")
+			sitButton.Set("onclick", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+				c.sit(seatIndex)
+				return nil
+			}))
+		}
+	}
+
+	if c.player != nil && c.player.Name == table.AdminName && !table.Playing {
+		startButton := c.document.Call("getElementById", "start_game_button")
+		startButton.Get("classList").Call("remove", "hidden")
+		startButton.Set("onclick", js.FuncOf(c.start))
+	}
 }
 
 func (c *Client) send(action interface{}) {
@@ -219,17 +251,33 @@ func (c *Client) send(action interface{}) {
 }
 
 func (c *Client) sit(seat int) {
-	c.send(tableserver.PlayerRequest{Type: tableserver.TableActionT, TableAction: tableserver.TableAction{TableActionType: tableserver.Sit, Seat: seat}})
+	c.send(gateway.PlayerRequest{Type: gateway.TableActionT, TableAction: tableserver.TableAction{TableActionType: tableserver.Sit, TableName: "t", Seat: seat}})
 }
 
 func (c *Client) stand() {
-	c.send(tableserver.PlayerRequest{Type: tableserver.TableActionT, TableAction: tableserver.TableAction{TableActionType: tableserver.Stand}})
+	c.send(gateway.PlayerRequest{Type: gateway.TableActionT, TableAction: tableserver.TableAction{TableActionType: tableserver.Stand}})
 }
 
 func (c *Client) bet(amount int) {
-	c.send(tableserver.PlayerRequest{Type: tableserver.RoundActionT, RoundAction: model.RoundAction{ActionType: model.Raise, Bet: amount}})
+	c.send(gateway.PlayerRequest{Type: gateway.RoundActionT, RoundAction: model.RoundAction{ActionType: model.Raise, Bet: amount}})
 }
 
 func (c *Client) fold() {
-	c.send(tableserver.PlayerRequest{Type: tableserver.RoundActionT, RoundAction: model.RoundAction{ActionType: model.Fold}})
+	c.send(gateway.PlayerRequest{Type: gateway.RoundActionT, RoundAction: model.RoundAction{ActionType: model.Fold}})
+}
+
+func (c *Client) start(this js.Value, args []js.Value) interface{} {
+	c.send(gateway.PlayerRequest{Type: gateway.TableActionT, TableAction: tableserver.TableAction{TableActionType: tableserver.Start, TableName: c.table.Name}})
+	return nil
+}
+
+func (c *Client) renderHoleCards(cards []poker.Card) {
+	playerHand := c.document.Call("getElementById", "player_hand")
+	playerHand.Set("innerHTML", "")
+	for _, card := range cards {
+		cardDiv := c.document.Call("createElement", "div")
+		cardDiv.Set("className", "card")
+		cardDiv.Set("textContent", card.String())
+		playerHand.Call("appendChild", cardDiv)
+	}
 }
