@@ -368,6 +368,7 @@ func (ts *TableServer) Serve() {
 			if err == nil {
 				p.table = table
 				table.players[p.playerModel.Name] = p
+				a.PlayerName = p.GetName()
 				a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
 			}
 			ts.mutex.Unlock()

@@ -204,12 +204,41 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 			c.table = update.PlayerUpdate.Table
 		case tableserver.NewHandUpdateT:
 			c.renderHoleCards(update.PlayerUpdate.Hole)
+		case tableserver.TableUpdateT:
+			c.handleTableUpdate(update.PlayerUpdate.TableAction)
 		}
 	case gateway.TableActionResponseT:
-		// TODO check the action and if err is nil, update the UI accordingly.
+		if update.TableActionResponse.Err != nil {
+			// TODO: display error to user
+			return nil
+		}
+		switch update.TableActionResponse.TableAction.TableActionType {
+		case tableserver.Sit:
+			// TODO
+		case tableserver.Stand:
+			// TODO
+		case tableserver.Join:
+			// TODO
+		case tableserver.Leave:
+			// TODO
+		case tableserver.Create:
+			// TODO
+		case tableserver.Start:
+			// TODO
+		}
 	}
 
 	return nil
+}
+
+func (c *Client) handleTableUpdate(action tableserver.TableAction) {
+	switch action.TableActionType {
+	case tableserver.Sit:
+		seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", action.Seat))
+		playerName := seat.Call("querySelector", ".player_name")
+		playerName.Set("textContent", action.PlayerName)
+		seat.Call("querySelector", ".sit_down_button").Get("classList").Call("add", "hidden")
+	}
 }
 
 func (c *Client) renderFullTable(table tableserver.SerializableTable) {
@@ -251,7 +280,7 @@ func (c *Client) send(action interface{}) {
 }
 
 func (c *Client) sit(seat int) {
-	c.send(gateway.PlayerRequest{Type: gateway.TableActionT, TableAction: tableserver.TableAction{TableActionType: tableserver.Sit, TableName: "t", Seat: seat}})
+	c.send(gateway.PlayerRequest{Type: gateway.TableActionT, TableAction: tableserver.TableAction{TableActionType: tableserver.Sit, TableName: c.table.Name, Seat: seat}})
 }
 
 func (c *Client) stand() {
