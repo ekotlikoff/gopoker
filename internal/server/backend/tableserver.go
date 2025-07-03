@@ -348,8 +348,13 @@ func (ts *TableServer) Serve() {
 			)
 		case Stand:
 			ts.mutex.Lock()
-			a.player.playerModel.StandUp()
-			a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
+			if a.player.GetTable().IsPlaying() {
+				a.player.playerModel.StandUp()
+			} else {
+				a.player.playerModel.StandNow()
+				a.Seat = a.player.GetSeat()
+				a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
+			}
 			ts.mutex.Unlock()
 		case Sit:
 			ts.mutex.Lock()
@@ -417,6 +422,13 @@ func (p *Player) GetName() string {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	return p.playerModel.Name
+}
+
+// GetSeat get's the player's seat.
+func (p *Player) GetSeat() int {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	return p.playerModel.SeatIndex
 }
 
 // GetTable get's the player's current table.

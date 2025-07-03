@@ -238,10 +238,24 @@ func (c *Client) handleTableUpdate(action tableserver.TableAction) {
 		playerName := seat.Call("querySelector", ".player_name")
 		playerName.Set("textContent", action.PlayerName)
 		seat.Call("querySelector", ".sit_down_button").Get("classList").Call("add", "hidden")
+		if action.PlayerName == c.player.Name {
+			// Hide the stand button
+			c.document.Call("getElementById", "stand_button").Get("classList").Call("remove", "hidden")
+		}
+	case tableserver.Stand:
+		seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", action.Seat))
+		playerName := seat.Call("querySelector", ".player_name")
+		playerName.Set("textContent", "")
+		seat.Call("querySelector", ".sit_down_button").Get("classList").Call("remove", "hidden")
+		if action.PlayerName == c.player.Name {
+			// Hide the stand button
+			c.document.Call("getElementById", "stand_button").Get("classList").Call("add", "hidden")
+		}
 	}
 }
 
 func (c *Client) renderFullTable(table tableserver.SerializableTable) {
+	playerIsSeated := false
 	for i, player := range table.Table.Players {
 		seatIndex := i // Capture the loop variable
 		seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
@@ -251,6 +265,9 @@ func (c *Client) renderFullTable(table tableserver.SerializableTable) {
 		if player != nil {
 			playerName.Set("textContent", player.Name)
 			sitButton.Get("classList").Call("add", "hidden")
+			if c.player != nil && c.player.Name == player.Name {
+				playerIsSeated = true
+			}
 		} else {
 			playerName.Set("textContent", "")
 			sitButton.Get("classList").Call("remove", "hidden")
@@ -261,10 +278,19 @@ func (c *Client) renderFullTable(table tableserver.SerializableTable) {
 		}
 	}
 
-	if c.player != nil && c.player.Name == table.AdminName && !table.Playing {
+	if c.player.Name == table.AdminName && !table.Playing {
 		startButton := c.document.Call("getElementById", "start_game_button")
 		startButton.Get("classList").Call("remove", "hidden")
 		startButton.Set("onclick", js.FuncOf(c.start))
+	}
+
+	standButton := c.document.Call("getElementById", "stand_button")
+	standButton.Set("onclick", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		c.stand()
+		return nil
+	}))
+	if playerIsSeated {
+		standButton.Get("classList").Call("remove", "hidden")
 	}
 }
 
@@ -284,7 +310,7 @@ func (c *Client) sit(seat int) {
 }
 
 func (c *Client) stand() {
-	c.send(gateway.PlayerRequest{Type: gateway.TableActionT, TableAction: tableserver.TableAction{TableActionType: tableserver.Stand}})
+	c.send(gateway.PlayerRequest{Type: gateway.TableActionT, TableAction: tableserver.TableAction{TableActionType: tableserver.Stand, TableName: c.table.Name}})
 }
 
 func (c *Client) bet(amount int) {

@@ -54,6 +54,7 @@ type (
 		Name          string
 		Standing      bool
 		WantToStandUp bool
+		SeatIndex     int
 		Playing       bool
 		AllIn         bool
 		Hole          []poker.Card
@@ -238,6 +239,7 @@ func (t *Table) SitDown(p *Player, seat int) error {
 		t.Players[seat] = p
 		p.table = t
 		p.Standing = false
+		p.SeatIndex = seat
 		return nil
 	}
 	return errors.New("seat is occupied, " + fmt.Sprint(seat))
@@ -283,6 +285,16 @@ func (t *Table) HandleStanders() []string {
 		}
 	}
 	return newStanders
+}
+
+func (p *Player) StandNow() {
+	p.table.mutex.Lock()
+	defer p.table.mutex.Unlock()
+	p.Playing = false
+	p.Standing = true
+	p.WantToStandUp = false
+	p.table.Players[p.SeatIndex] = nil
+	p.table.Standers[p.Name] = p
 }
 
 // StandUp a player at the next chance
