@@ -287,6 +287,7 @@ func (t *Table) HandleStanders() []string {
 	return newStanders
 }
 
+// Stand the player immediately
 func (p *Player) StandNow() {
 	p.table.mutex.Lock()
 	defer p.table.mutex.Unlock()

@@ -33,6 +33,7 @@ const (
 
 	defaultTimeToBet        = time.Second * 30
 	defaultTimeBetweenHands = time.Second * 5
+	maxConcurrentTables     = 10
 )
 
 // Various types of updates that can be sent to a client.
@@ -60,10 +61,6 @@ type (
 		now() time.Time
 		sleep(time.Duration)
 		after(time.Duration) <-chan time.Time
-	}
-	// TableServerConfig defines the TableServer's behavior.
-	TableServerConfig struct {
-		maxConcurrentTables int
 	}
 	// TableConfig defines the TableServer's opinion of how a given Table should be run.
 	TableConfig struct {
@@ -148,11 +145,10 @@ type (
 	}
 	// TableServer is the server that orchestrates one or more ongoing Tables.
 	TableServer struct {
-		tableServerConfig TableServerConfig
-		tables            map[string]*Table
-		tableActions      chan TableAction
-		clock             clock
-		mutex             sync.Mutex
+		tables       map[string]*Table
+		tableActions chan TableAction
+		clock        clock
+		mutex        sync.Mutex
 	}
 
 	// TableActionType is the type of action a player can take on a table outside of an ongoing game.
@@ -213,9 +209,6 @@ func NewTableServer() *TableServer {
 // NewTableServerWithTime creates a new TableServer with specified time implementations.
 func NewTableServerWithTime(c clock) *TableServer {
 	return &TableServer{
-		tableServerConfig: TableServerConfig{
-			maxConcurrentTables: 5,
-		},
 		tables:       make(map[string]*Table),
 		tableActions: make(chan TableAction),
 		clock:        c,
@@ -229,6 +222,7 @@ func (ts *TableServer) GetTables() map[string]*Table {
 	return ts.tables
 }
 
+// SetPlayer sets the player on the TableAction
 func (a *TableAction) SetPlayer(p *Player) *TableAction {
 	a.player = p
 	return a
@@ -247,7 +241,7 @@ func (ts *TableServer) Stop() {
 func (ts *TableServer) newTable(name string, config TableConfig, creator string) error {
 	ts.mutex.Lock()
 	defer ts.mutex.Unlock()
-	if len(ts.tables) >= ts.tableServerConfig.maxConcurrentTables {
+	if len(ts.tables) >= maxConcurrentTables {
 		return errors.New("too many tables")
 	} else if _, ok := ts.tables[name]; ok {
 		return errors.New("duplicate name")
@@ -438,10 +432,12 @@ func (p *Player) GetTable() *Table {
 	return p.table
 }
 
+// TableResponseChan provides the player's TableResponseChan
 func (p *Player) TableResponseChan() <-chan TableActionResponse {
 	return p.tableResponseChan
 }
 
+// RoundResponseChan provides the player's RoundResponseChan
 func (p *Player) RoundResponseChan() <-chan RoundActionResponse {
 	return p.responseChan
 }
@@ -488,30 +484,35 @@ func (p *Player) join(t *Table) error {
 	return err
 }
 
+// IsPlaying returns whether the table is playing or not
 func (t *Table) IsPlaying() bool {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	return t.playing
 }
 
+// Players returns the players at the table
 func (t *Table) Players() [model.MaxTableSize]*model.Player {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	return t.table.Players
 }
 
+// Standers returns the standers at the table
 func (t *Table) Standers() map[string]*model.Player {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	return t.table.Standers
 }
 
+// Hand returns the table's hand
 func (t *Table) Hand() *model.Hand {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	return t.table.Hand
 }
 
+// TableConfig returns the table's config
 func (t *Table) TableConfig() TableConfig {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -532,12 +533,14 @@ func (t *Table) SerializableTable(p *Player) SerializableTable {
 	}
 }
 
+// DealerIndex returns the table's dealer index
 func (t *Table) DealerIndex() int {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	return t.table.DealerIndex
 }
 
+// PlayerCount returns the count of players sitting at the table
 func (t *Table) PlayerCount() int {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -550,6 +553,7 @@ func (t *Table) PlayerCount() int {
 	return count
 }
 
+// StanderCount gets the count of standers at the table
 func (t *Table) StanderCount() int {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
