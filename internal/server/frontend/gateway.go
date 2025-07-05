@@ -132,7 +132,7 @@ type (
 	Credentials struct {
 		Username string
 	}
-	// ServerToPlayerT is the type of server to client comm
+	// ServerToPlayerType is the type of server to client comm
 	ServerToPlayerType int
 	// ServerToPlayer wraps the various types of communications that can be sent to the client
 	ServerToPlayer struct {
@@ -206,6 +206,7 @@ func (gw *Gateway) handleWebRoot(w http.ResponseWriter, r *http.Request) {
 	http.FileServer(http.FS(webStaticFS)).ServeHTTP(w, r)
 }
 
+// Tables handles the /tables endpoint
 func (gw *Gateway) Tables(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -378,6 +379,7 @@ func (w *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return w.ResponseWriter.(http.Hijacker).Hijack()
 }
 
+// Websocket handles the /ws endpoint
 func (gw *Gateway) Websocket(w http.ResponseWriter, r *http.Request) {
 	player := GetSession(w, r)
 	if player == nil {
