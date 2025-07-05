@@ -700,6 +700,7 @@ func newStateUpdate(playStopped bool, nowStanding []string) *PlayerUpdate {
 	}
 }
 
+// NewFullUpdate creates a FullUpdateT from the player's table
 func (p *Player) NewFullUpdate() *PlayerUpdate {
 	return &PlayerUpdate{
 		Type:  FullUpdateT,
