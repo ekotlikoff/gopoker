@@ -316,7 +316,7 @@ func (hand *Hand) playerFold() {
 	hand.Pot.MainPot.Pot += player.BetAmount
 	player.BetAmount = 0
 	for _, pot := range append(hand.Pot.SidePots, hand.Pot.MainPot) {
-		delete(pot.Players, player)
+		delete(pot.Players, player.Name)
 	}
 	if hand.Round.BetTurn == hand.Players {
 		hand.Players = hand.Players.Prev()

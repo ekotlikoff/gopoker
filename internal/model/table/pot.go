@@ -15,7 +15,7 @@ type (
 
 	// SubPot is one of potentially multiple pots and identifies the players in the running to win it
 	SubPot struct {
-		Players map[*Player]struct{}
+		Players map[string]struct{}
 		Pot     int
 	}
 )
@@ -40,7 +40,7 @@ func (hand *Hand) createPots() {
 			bet = hand.Round.CurrentBet - player.BetAmount
 		} else {
 			hand.Pot.MainPot.Pot += player.BetAmount
-			hand.Pot.MainPot.Players[player] = struct{}{}
+			hand.Pot.MainPot.Players[player.Name] = struct{}{}
 		}
 		player.BetAmount = 0
 	}
@@ -51,14 +51,14 @@ func (hand *Hand) createSidePot(player *Player, playersAscBet []*Player, i int) 
 	// Take bet amt out of everyone's funds, add to mainpot, move mainpot
 	// to a sidepot, and create a new mainpot
 	hand.Pot.MainPot.Pot += player.BetAmount
-	hand.Pot.MainPot.Players[player] = struct{}{}
+	hand.Pot.MainPot.Players[player.Name] = struct{}{}
 	for _, p := range playersAscBet[i+1:] {
 		p.BetAmount -= player.BetAmount
-		hand.Pot.MainPot.Players[p] = struct{}{}
+		hand.Pot.MainPot.Players[p.Name] = struct{}{}
 		hand.Pot.MainPot.Pot += player.BetAmount
 	}
 	hand.Pot.SidePots = append(hand.Pot.SidePots, hand.Pot.MainPot)
-	hand.Pot.MainPot = SubPot{make(map[*Player]struct{}), 0}
+	hand.Pot.MainPot = SubPot{make(map[string]struct{}), 0}
 }
 
 func (hand *Hand) getPlayerRanking() [][]*Player {
@@ -96,7 +96,7 @@ func (hand *Hand) distributePots(playerRanking [][]*Player) []Winner {
 		for _, pRanking := range playerRanking {
 			winners := []*Player{}
 			for _, p := range pRanking {
-				if _, ok := pot.Players[p]; ok {
+				if _, ok := pot.Players[p.Name]; ok {
 					winners = append(winners, p)
 				}
 			}

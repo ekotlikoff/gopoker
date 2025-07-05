@@ -129,7 +129,7 @@ func NewPlayerWithFunds(name string, funds int) *Player {
 
 // Returns ring starting at the dealer
 func (t *Table) playersForHand() (*ring.Ring, Pot) {
-	mainPot := SubPot{make(map[*Player]struct{}), 0}
+	mainPot := SubPot{make(map[string]struct{}), 0}
 	index := (t.DealerIndex + 1) % len(t.Players)
 	var playersPlaying []*Player
 	for i := 0; i < len(t.Players); i++ {
@@ -140,7 +140,7 @@ func (t *Table) playersForHand() (*ring.Ring, Pot) {
 				t.Players[index] = nil
 			} else {
 				playersPlaying = append(playersPlaying, p)
-				mainPot.Players[p] = struct{}{}
+				mainPot.Players[p.Name] = struct{}{}
 			}
 		}
 		index = (index + 1) % len(t.Players)
