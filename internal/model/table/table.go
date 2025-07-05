@@ -228,7 +228,7 @@ func (t *Table) Join(p *Player) error {
 func (t *Table) SitDown(p *Player, seat int) error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	if p.Standing != true {
+	if p.table == t && !p.Standing {
 		return fmt.Errorf("Player already sitting")
 	} else if p.Funds < t.TableConfig.minBet {
 		return fmt.Errorf("Player has insufficient funds to sit (%d < %d)", p.Funds, t.TableConfig.minBet)

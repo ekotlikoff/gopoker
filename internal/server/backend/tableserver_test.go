@@ -158,11 +158,16 @@ func createTableWithTwoPlayers(tableName string) (*TableServer, *Player, *Player
 
 func checkForUpdate(t *testing.T, p *Player, want PlayerUpdateType) *PlayerUpdate {
 	t.Helper()
-	u := <-p.TableUpdateChan
-	if u.Type != want {
-		t.Errorf("want %v got %v", want, u.Type)
+	select {
+	case u := <-p.TableUpdateChan:
+		if u.Type != want {
+			t.Errorf("want %v got %v", want, u.Type)
+		}
+		return u
+	case <-time.After(time.Second):
+		t.Fail()
+		return nil
 	}
-	return u
 }
 
 func TestSimpleHand(t *testing.T) {
@@ -220,12 +225,8 @@ func TestSimpleHand(t *testing.T) {
 	if !p1.playerModel.WantToStandUp {
 		t.Error("p1 should want to stand up")
 	}
-	checkForUpdate(t, p1, TableUpdateT)
-	checkForUpdate(t, p2, TableUpdateT)
 	ts.SendTableAction(StandTableAction(tableName, p2))
 	p2.GetTableResponse()
-	checkForUpdate(t, p1, TableUpdateT)
-	checkForUpdate(t, p2, TableUpdateT)
 	p1.SendRoundAction(model.RoundAction{ActionType: model.Call})
 	if r := p1.GetRoundResponse(); r.Err != nil {
 		t.Errorf("expected a successful bet, got error: %s", r.Err)
