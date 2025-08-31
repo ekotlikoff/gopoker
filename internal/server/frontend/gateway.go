@@ -171,6 +171,7 @@ func (gw *Gateway) Serve() {
 	mux.Handle(bp+"/session", middleware(http.HandlerFunc(Session)))
 	mux.Handle(bp+"/tables", middleware(http.HandlerFunc(gw.Tables)))
 	mux.Handle(bp+"/ws", middleware(http.HandlerFunc(gw.Websocket)))
+	mux.Handle(bp+"/login", middleware(http.HandlerFunc(gw.login)))
 	// Prometheus metrics endpoint
 	mux.Handle(bp+"/metrics", middleware(
 		promhttp.Handler()))
@@ -235,9 +236,8 @@ func (gw *Gateway) getTables(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (gw *Gateway) createTable(w http.ResponseWriter, r *http.Request) {
+func (gw *Gateway) login(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name     string `json:"name"`
 		Username string `json:"username"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -272,6 +272,23 @@ func (gw *Gateway) createTable(w http.ResponseWriter, r *http.Request) {
 			Value:   sessionTokenStr,
 			Expires: time.Now().Add(1800 * time.Second),
 		})
+	}
+}
+
+func (gw *Gateway) createTable(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	player := getPlayerFromSession(r)
+
+	if player == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
 	}
 
 	action := tableserver.CreateTableAction(req.Name, player)
@@ -385,6 +402,18 @@ func (gw *Gateway) Websocket(w http.ResponseWriter, r *http.Request) {
 	if player == nil {
 		log.Println("No player found for session")
 		return
+	}
+
+	if player.GetTable() == nil {
+		// If player hasn't already joined the table, do so now.
+		table := r.URL.Query().Get("table")
+		gw.TableServer.SendTableAction(tableserver.JoinTableAction(table, player))
+		resp := player.GetTableResponse()
+		if resp.Err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(resp.Err.Error()))
+			return
+		}
 	}
 
 	c, err := upgrader.Upgrade(w, r, nil)

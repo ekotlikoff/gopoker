@@ -42,15 +42,34 @@ func main() {
 
 func (c *Client) initLobby() {
 	go func() {
-		if c.getSession() {
-			c.showLobby()
-		} else {
-			c.showLogin()
-		}
+		c.getSession()
+		c.showLobby()
 		c.getTables()
 		c.renderTables()
 	}()
+	js.Global().Get("document").Call("getElementById", "login_button").Set("onclick", js.FuncOf(c.login))
 	js.Global().Get("document").Call("getElementById", "create_table_button").Set("onclick", js.FuncOf(c.createTable))
+}
+
+func (c *Client) login(this js.Value, args []js.Value) interface{} {
+	username := c.document.Call("getElementById", "username_input").Get("value").String()
+	if username == "" {
+		return nil
+	}
+
+	go func() {
+		if err := c.post("login", map[string]string{"username": username}); err != nil {
+			// Handle error, e.g., show a message to the user
+			return
+		}
+		c.player = model.NewPlayer(username)
+		c.document.Call("getElementById", "username_input").Set("value", username)
+		c.document.Call("getElementById", "username_input").Set("disabled", true)
+		c.document.Call("getElementById", "login_button").Get("classList").Call("add", "hidden")
+	}()
+
+	return nil
+
 }
 
 func (c *Client) getSession() bool {
@@ -66,13 +85,10 @@ func (c *Client) getSession() bool {
 	}
 
 	c.player = model.NewPlayer(session.Credentials.Username)
+	c.document.Call("getElementById", "username_input").Set("value", session.Credentials.Username)
+	c.document.Call("getElementById", "username_input").Set("disabled", true)
+	c.document.Call("getElementById", "login_button").Get("classList").Call("add", "hidden")
 	return true
-}
-
-func (c *Client) showLogin() {
-	// Similar to gochess, we can add a login form if needed.
-	// For now, we'll just show the lobby and assume a user.
-	c.showLobby()
 }
 
 func (c *Client) showLobby() {
@@ -131,15 +147,10 @@ func (c *Client) createTable(this js.Value, args []js.Value) interface{} {
 	}
 
 	go func() {
-		username := c.document.Call("getElementById", "username_input").Get("value").String()
-		if c.player != nil {
-			username = c.player.Name
-		}
-		if err := c.post("tables", map[string]string{"name": tableName, "username": username}); err != nil {
+		if err := c.post("tables", map[string]string{"name": tableName}); err != nil {
 			// Handle error, e.g., show a message to the user
 			return
 		}
-		c.player = &model.Player{Name: username}
 		c.joinTable(tableName)
 	}()
 
@@ -157,11 +168,6 @@ func (c *Client) post(endpoint string, data interface{}) error {
 		return err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("bad status: %s", resp.Status)
-	}
-
 	return nil
 }
 
