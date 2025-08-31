@@ -24,6 +24,8 @@ type Client struct {
 	player   *model.Player
 	table    tableserver.SerializableTable
 	tables   []model.TableSummary
+	sitting  bool
+	playing  bool
 }
 
 func main() {
@@ -220,9 +222,33 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 		}
 		switch update.TableActionResponse.TableAction.TableActionType {
 		case tableserver.Sit:
-			// TODO
+			if update.TableActionResponse.Err == nil {
+				c.sitting = true
+				// Show the stand button
+				c.document.Call("getElementById", "stand_button").Get("classList").Call("remove", "hidden")
+				// Hide the sit buttons
+				for i := 0; i < model.MaxTableSize; i++ {
+					seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
+					sitButton := seat.Call("querySelector", ".sit_down_button")
+					sitButton.Get("classList").Call("add", "hidden")
+				}
+			}
 		case tableserver.Stand:
-			// TODO
+			if update.TableActionResponse.Err == nil {
+				c.sitting = false
+				// Hide the stand button
+				c.document.Call("getElementById", "stand_button").Get("classList").Call("add", "hidden")
+				// Show the sit buttons
+				for i := 0; i < model.MaxTableSize; i++ {
+					seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
+					player := seat.Call("querySelector", ".player_name").Get("textContent").String()
+					if player == "" {
+						seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
+						sitButton := seat.Call("querySelector", ".sit_down_button")
+						sitButton.Get("classList").Call("remove", "hidden")
+					}
+				}
+			}
 		case tableserver.Join:
 			// TODO
 		case tableserver.Leave:
@@ -244,24 +270,18 @@ func (c *Client) handleTableUpdate(action tableserver.TableAction) {
 		playerName := seat.Call("querySelector", ".player_name")
 		playerName.Set("textContent", action.PlayerName)
 		seat.Call("querySelector", ".sit_down_button").Get("classList").Call("add", "hidden")
-		if action.PlayerName == c.player.Name {
-			// Hide the stand button
-			c.document.Call("getElementById", "stand_button").Get("classList").Call("remove", "hidden")
-		}
 	case tableserver.Stand:
 		seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", action.Seat))
 		playerName := seat.Call("querySelector", ".player_name")
 		playerName.Set("textContent", "")
-		seat.Call("querySelector", ".sit_down_button").Get("classList").Call("remove", "hidden")
-		if action.PlayerName == c.player.Name {
-			// Hide the stand button
-			c.document.Call("getElementById", "stand_button").Get("classList").Call("add", "hidden")
+		if !c.sitting {
+			seat.Call("querySelector", ".sit_down_button").Get("classList").Call("remove", "hidden")
 		}
 	}
 }
 
 func (c *Client) renderFullTable(table tableserver.SerializableTable) {
-	playerIsSeated := false
+	c.sitting = false
 	for i, player := range table.Table.Players {
 		seatIndex := i // Capture the loop variable
 		seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
@@ -272,7 +292,7 @@ func (c *Client) renderFullTable(table tableserver.SerializableTable) {
 			playerName.Set("textContent", player.Name)
 			sitButton.Get("classList").Call("add", "hidden")
 			if c.player != nil && c.player.Name == player.Name {
-				playerIsSeated = true
+				c.sitting = true
 			}
 		} else {
 			playerName.Set("textContent", "")
@@ -281,6 +301,14 @@ func (c *Client) renderFullTable(table tableserver.SerializableTable) {
 				c.sit(seatIndex)
 				return nil
 			}))
+		}
+	}
+
+	if c.sitting {
+		for i := 0; i < model.MaxTableSize; i++ {
+			seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
+			sitButton := seat.Call("querySelector", ".sit_down_button")
+			sitButton.Get("classList").Call("add", "hidden")
 		}
 	}
 
@@ -295,7 +323,7 @@ func (c *Client) renderFullTable(table tableserver.SerializableTable) {
 		c.stand()
 		return nil
 	}))
-	if playerIsSeated {
+	if c.sitting {
 		standButton.Get("classList").Call("remove", "hidden")
 	}
 }
