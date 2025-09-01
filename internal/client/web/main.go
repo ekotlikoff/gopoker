@@ -18,6 +18,14 @@ import (
 	gateway "github.com/ekotlikoff/gopoker/internal/server/frontend"
 )
 
+// Looks like our poker library doesn't define consts for these.
+const (
+	spade   int32 = 1
+	heart   int32 = 2
+	diamond int32 = 4
+	club    int32 = 8
+)
+
 type Client struct {
 	document js.Value
 	client   *http.Client
@@ -345,6 +353,10 @@ func (c *Client) renderFullTable(table tableserver.SerializableTable) {
 		}
 	}
 
+	if table.Table.Hand != nil {
+		c.renderCommunityCards(table.Table.Hand.Board)
+	}
+
 	if c.sitting {
 		for i := 0; i < model.MaxTableSize; i++ {
 			seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
@@ -416,6 +428,11 @@ func (c *Client) renderHoleCards(cards []poker.Card) {
 	for _, card := range cards {
 		cardDiv := c.document.Call("createElement", "div")
 		cardDiv.Set("className", "card")
+		if card.Suit() == spade || card.Suit() == club {
+			cardDiv.Get("classList").Call("add", "black")
+		} else {
+			cardDiv.Get("classList").Call("add", "red")
+		}
 		cardDiv.Set("textContent", card.String())
 		playerHand.Call("appendChild", cardDiv)
 	}
@@ -432,6 +449,11 @@ func (c *Client) renderCommunityCards(cards []poker.Card) {
 	for _, card := range cards {
 		cardDiv := c.document.Call("createElement", "div")
 		cardDiv.Set("className", "card")
+		if card.Suit() == spade || card.Suit() == club {
+			cardDiv.Get("classList").Call("add", "black")
+		} else {
+			cardDiv.Get("classList").Call("add", "red")
+		}
 		cardDiv.Set("textContent", card.String())
 		communityCardsDiv.Call("appendChild", cardDiv)
 	}
