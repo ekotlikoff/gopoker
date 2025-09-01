@@ -218,6 +218,7 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 			c.renderBets(update.PlayerUpdate.CurrentBets)
 			c.document.Call("getElementById", "current_bet_amount").Set("value", c.bigBlind)
 			c.renderPot(update.PlayerUpdate.Pot)
+			c.renderFunds(update.PlayerUpdate.CurrentFunds)
 		case tableserver.BetUpdateT:
 			c.document.Call("getElementById", "player_controls").Get("classList").Call("remove", "hidden")
 		case tableserver.TableUpdateT:
@@ -225,6 +226,7 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 		case tableserver.RoundUpdateT:
 			c.renderBets(update.PlayerUpdate.CurrentBets)
 			c.renderPot(update.PlayerUpdate.Pot)
+			c.renderFunds(update.PlayerUpdate.CurrentFunds)
 		}
 	case gateway.TableActionResponseT:
 		if update.TableActionResponse.Err != nil {
@@ -321,6 +323,12 @@ func (c *Client) renderFullTable(table tableserver.SerializableTable) {
 			if c.player != nil && c.player.Name == player.Name {
 				c.sitting = true
 			}
+			chipsDiv := seat.Call("querySelector", ".player_chips")
+			if player.Funds > 0 {
+				chipsDiv.Set("textContent", fmt.Sprintf("Chips: %d", player.Funds))
+			} else {
+				chipsDiv.Set("textContent", "")
+			}
 		} else {
 			playerName.Set("textContent", "")
 			sitButton.Get("classList").Call("remove", "hidden")
@@ -410,4 +418,16 @@ func (c *Client) renderHoleCards(cards []poker.Card) {
 func (c *Client) renderPot(pot int) {
 	potDiv := c.document.Call("getElementById", "pot")
 	potDiv.Set("textContent", fmt.Sprintf("Pot: %d", pot))
+}
+
+func (c *Client) renderFunds(funds []int) {
+	for i, f := range funds {
+		seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
+		fundsDiv := seat.Call("querySelector", ".player_funds")
+		if f > 0 {
+			fundsDiv.Set("textContent", fmt.Sprintf("Chips: %d", f))
+		} else {
+			fundsDiv.Set("textContent", "")
+		}
+	}
 }

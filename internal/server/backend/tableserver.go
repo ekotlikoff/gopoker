@@ -98,6 +98,8 @@ type (
 		CurrentBetter string
 		// CurrentBets is the current bets from each player.
 		CurrentBets []int
+		// CurrentFunds is the current funds for each player.
+		CurrentFunds []int
 		// Pot is the total pot in the hand.
 		Pot int
 		// Table contains the full table state, sent upon first connection.
@@ -677,17 +679,29 @@ func (t *Table) currentBets() []int {
 	return out
 }
 
+func (t *Table) currentFunds() []int {
+	players := t.table.GetPlayers()
+	out := make([]int, len(players))
+	for i, p := range players {
+		if p != nil {
+			out[i] = p.Funds
+		}
+	}
+	return out
+}
+
 func (t *Table) sendNewHandUpdates(bb int, d string) {
 	var wg sync.WaitGroup
 	for _, p := range t.players {
 		p.sendPlayerUpdate(
 			&PlayerUpdate{
-				Type:        NewHandUpdateT,
-				Hole:        p.playerModel.Hole,
-				BigBlind:    bb,
-				Dealer:      d,
-				CurrentBets: t.currentBets(),
-				Pot:         t.Hand().Pot.MainPot.Pot,
+				Type:         NewHandUpdateT,
+				Hole:         p.playerModel.Hole,
+				BigBlind:     bb,
+				Dealer:       d,
+				CurrentBets:  t.currentBets(),
+				CurrentFunds: t.currentFunds(),
+				Pot:          t.Hand().Pot.MainPot.Pot,
 			}, &wg)
 	}
 	wg.Wait()
@@ -744,6 +758,7 @@ func (t *Table) newRoundUpdate(a model.RoundAction, p *model.Player) *PlayerUpda
 		RoundAction:   a,
 		CurrentBetter: p.Name,
 		CurrentBets:   t.currentBets(),
+		CurrentFunds:  t.currentFunds(),
 		Pot:           t.Hand().Pot.MainPot.Pot,
 	}
 }
