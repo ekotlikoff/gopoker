@@ -96,6 +96,10 @@ type (
 		RoundAction model.RoundAction
 		// CurrentBetter is the player that made the round action.
 		CurrentBetter string
+		// CurrentBets is the current bets from each player.
+		CurrentBets []int
+		// Pot is the total pot in the hand.
+		Pot int
 		// Table contains the full table state, sent upon first connection.
 		Table SerializableTable
 		// TableAction is a table action that may be relevant to a client.
@@ -662,15 +666,28 @@ func (t *Table) handlePause() {
 
 }
 
+func (t *Table) currentBets() []int {
+	players := t.table.GetPlayers()
+	out := make([]int, len(players))
+	for i, p := range players {
+		if p != nil {
+			out[i] = p.BetAmount
+		}
+	}
+	return out
+}
+
 func (t *Table) sendNewHandUpdates(bb int, d string) {
 	var wg sync.WaitGroup
 	for _, p := range t.players {
 		p.sendPlayerUpdate(
 			&PlayerUpdate{
-				Type:     NewHandUpdateT,
-				Hole:     p.playerModel.Hole,
-				BigBlind: bb,
-				Dealer:   d,
+				Type:        NewHandUpdateT,
+				Hole:        p.playerModel.Hole,
+				BigBlind:    bb,
+				Dealer:      d,
+				CurrentBets: t.currentBets(),
+				Pot:         t.Hand().Pot.MainPot.Pot,
 			}, &wg)
 	}
 	wg.Wait()
@@ -721,11 +738,13 @@ func newBetUpdate() *PlayerUpdate {
 	}
 }
 
-func newRoundUpdate(a model.RoundAction, p *model.Player) *PlayerUpdate {
+func (t *Table) newRoundUpdate(a model.RoundAction, p *model.Player) *PlayerUpdate {
 	return &PlayerUpdate{
 		Type:          RoundUpdateT,
 		RoundAction:   a,
 		CurrentBetter: p.Name,
+		CurrentBets:   t.currentBets(),
+		Pot:           t.Hand().Pot.MainPot.Pot,
 	}
 }
 
@@ -740,7 +759,7 @@ func (t *Table) listenForPlayerActions() {
 			err := t.table.HandlePlayerAction(player, a)
 			timeRemaining -= elapsedTime
 			if err == nil {
-				t.sendPlayerUpdates(newRoundUpdate(a, player))
+				t.sendPlayerUpdates(t.newRoundUpdate(a, player))
 				success = true
 			} else {
 				log.Println(err)

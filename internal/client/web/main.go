@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
+	"strconv"
 	"syscall/js"
 
 	"github.com/chehsunliu/poker"
@@ -26,6 +27,7 @@ type Client struct {
 	tables   []model.TableSummary
 	sitting  bool
 	playing  bool
+	bigBlind int
 }
 
 func main() {
@@ -212,8 +214,17 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 			c.table = update.PlayerUpdate.Table
 		case tableserver.NewHandUpdateT:
 			c.renderHoleCards(update.PlayerUpdate.Hole)
+			c.bigBlind = update.PlayerUpdate.BigBlind
+			c.renderBets(update.PlayerUpdate.CurrentBets)
+			c.document.Call("getElementById", "current_bet_amount").Set("value", c.bigBlind)
+			c.renderPot(update.PlayerUpdate.Pot)
+		case tableserver.BetUpdateT:
+			c.document.Call("getElementById", "player_controls").Get("classList").Call("remove", "hidden")
 		case tableserver.TableUpdateT:
 			c.handleTableUpdate(update.PlayerUpdate.TableAction)
+		case tableserver.RoundUpdateT:
+			c.renderBets(update.PlayerUpdate.CurrentBets)
+			c.renderPot(update.PlayerUpdate.Pot)
 		}
 	case gateway.TableActionResponseT:
 		if update.TableActionResponse.Err != nil {
@@ -258,9 +269,25 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 		case tableserver.Start:
 			// TODO
 		}
+	case gateway.RoundActionResponseT:
+		if update.RoundActionResponse.Err == nil {
+			c.document.Call("getElementById", "player_controls").Get("classList").Call("add", "hidden")
+		}
 	}
 
 	return nil
+}
+
+func (c *Client) renderBets(currentBets []int) {
+	for i, bet := range currentBets {
+		seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
+		betDiv := seat.Call("querySelector", ".player_bet")
+		if bet != 0 {
+			betDiv.Set("textContent", fmt.Sprintf("Bet: %d", bet))
+		} else {
+			betDiv.Set("textContent", "")
+		}
+	}
 }
 
 func (c *Client) handleTableUpdate(action tableserver.TableAction) {
@@ -326,6 +353,12 @@ func (c *Client) renderFullTable(table tableserver.SerializableTable) {
 	if c.sitting {
 		standButton.Get("classList").Call("remove", "hidden")
 	}
+
+	betButton := c.document.Call("getElementById", "bet_button")
+	betButton.Set("onclick", js.FuncOf(c.bet))
+
+	foldButton := c.document.Call("getElementById", "fold_button")
+	foldButton.Set("onclick", js.FuncOf(c.fold))
 }
 
 func (c *Client) send(action interface{}) {
@@ -347,12 +380,15 @@ func (c *Client) stand() {
 	c.send(gateway.PlayerRequest{Type: gateway.TableActionT, TableAction: tableserver.TableAction{TableActionType: tableserver.Stand, TableName: c.table.Name}})
 }
 
-func (c *Client) bet(amount int) {
-	c.send(gateway.PlayerRequest{Type: gateway.RoundActionT, RoundAction: model.RoundAction{ActionType: model.Raise, Bet: amount}})
+func (c *Client) bet(this js.Value, args []js.Value) interface{} {
+	betAmount, _ := strconv.Atoi(c.document.Call("getElementById", "current_bet_amount").Get("value").String())
+	c.send(gateway.PlayerRequest{Type: gateway.RoundActionT, RoundAction: model.RoundAction{ActionType: model.Raise, Bet: betAmount}})
+	return nil
 }
 
-func (c *Client) fold() {
+func (c *Client) fold(this js.Value, args []js.Value) interface{} {
 	c.send(gateway.PlayerRequest{Type: gateway.RoundActionT, RoundAction: model.RoundAction{ActionType: model.Fold}})
+	return nil
 }
 
 func (c *Client) start(this js.Value, args []js.Value) interface{} {
@@ -369,4 +405,9 @@ func (c *Client) renderHoleCards(cards []poker.Card) {
 		cardDiv.Set("textContent", card.String())
 		playerHand.Call("appendChild", cardDiv)
 	}
+}
+
+func (c *Client) renderPot(pot int) {
+	potDiv := c.document.Call("getElementById", "pot")
+	potDiv.Set("textContent", fmt.Sprintf("Pot: %d", pot))
 }

@@ -149,16 +149,63 @@
         }
 
         /* Seat Positioning (10 seats) */
-        #seat_0 { top: 50%; left: 0; transform: translateY(-50%); }      /* Left Middle */
-        #seat_1 { top: 20%; left: 10%; }
-        #seat_2 { top: 0; left: 35%; transform: translateX(-50%); }
-        #seat_3 { top: 0; right: 35%; transform: translateX(50%); }
-        #seat_4 { top: 20%; right: 10%; }
-        #seat_5 { top: 50%; right: 0; transform: translateY(-50%); }     /* Right Middle */
-        #seat_6 { bottom: 20%; right: 10%; }
-        #seat_7 { bottom: 0; right: 35%; transform: translateX(50%); }
-        #seat_8 { bottom: 0; left: 35%; transform: translateX(-50%); }
-        #seat_9 { bottom: 20%; left: 10%; }
+        #seat_0 {
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+        }
+
+        /* Left Middle */
+        #seat_1 {
+            top: 20%;
+            left: 10%;
+        }
+
+        #seat_2 {
+            top: 0;
+            left: 35%;
+            transform: translateX(-50%);
+        }
+
+        #seat_3 {
+            top: 0;
+            right: 35%;
+            transform: translateX(50%);
+        }
+
+        #seat_4 {
+            top: 20%;
+            right: 10%;
+        }
+
+        #seat_5 {
+            top: 50%;
+            right: 0;
+            transform: translateY(-50%);
+        }
+
+        /* Right Middle */
+        #seat_6 {
+            bottom: 20%;
+            right: 10%;
+        }
+
+        #seat_7 {
+            bottom: 0;
+            right: 35%;
+            transform: translateX(50%);
+        }
+
+        #seat_8 {
+            bottom: 0;
+            left: 35%;
+            transform: translateX(-50%);
+        }
+
+        #seat_9 {
+            bottom: 20%;
+            left: 10%;
+        }
 
         /* Cards */
         .card {
@@ -301,25 +348,35 @@
             </div>
 
             <!-- 8 Seats -->
-            <div id="seat_0" class="seat"><span class="player_name"></span><button class="sit_down_button">Sit</button>
+            <div id="seat_0" class="seat"><span class="player_name"></span>
+                <div class="player_bet"></div><button class="sit_down_button">Sit</button>
             </div>
-            <div id="seat_1" class="seat"><span class="player_name"></span><button class="sit_down_button">Sit</button>
+            <div id="seat_1" class="seat"><span class="player_name"></span>
+                <div class="player_bet"></div><button class="sit_down_button">Sit</button>
             </div>
-            <div id="seat_2" class="seat"><span class="player_name"></span><button class="sit_down_button">Sit</button>
+            <div id="seat_2" class="seat"><span class="player_name"></span>
+                <div class="player_bet"></div><button class="sit_down_button">Sit</button>
             </div>
-            <div id="seat_3" class="seat"><span class="player_name"></span><button class="sit_down_button">Sit</button>
+            <div id="seat_3" class="seat"><span class="player_name"></span>
+                <div class="player_bet"></div><button class="sit_down_button">Sit</button>
             </div>
-            <div id="seat_4" class="seat"><span class="player_name"></span><button class="sit_down_button">Sit</button>
+            <div id="seat_4" class="seat"><span class="player_name"></span>
+                <div class="player_bet"></div><button class="sit_down_button">Sit</button>
             </div>
-            <div id="seat_5" class="seat"><span class="player_name"></span><button class="sit_down_button">Sit</button>
+            <div id="seat_5" class="seat"><span class="player_name"></span>
+                <div class="player_bet"></div><button class="sit_down_button">Sit</button>
             </div>
-            <div id="seat_6" class="seat"><span class="player_name"></span><button class="sit_down_button">Sit</button>
+            <div id="seat_6" class="seat"><span class="player_name"></span>
+                <div class="player_bet"></div><button class="sit_down_button">Sit</button>
             </div>
-            <div id="seat_7" class="seat"><span class="player_name"></span><button class="sit_down_button">Sit</button>
+            <div id="seat_7" class="seat"><span class="player_name"></span>
+                <div class="player_bet"></div><button class="sit_down_button">Sit</button>
             </div>
-            <div id="seat_8" class="seat"><span class="player_name"></span><button class="sit_down_button">Sit</button>
+            <div id="seat_8" class="seat"><span class="player_name"></span>
+                <div class="player_bet"></div><button class="sit_down_button">Sit</button>
             </div>
-            <div id="seat_9" class="seat"><span class="player_name"></span><button class="sit_down_button">Sit</button>
+            <div id="seat_9" class="seat"><span class="player_name"></span>
+                <div class="player_bet"></div><button class="sit_down_button">Sit</button>
             </div>
         </div>
 
@@ -328,8 +385,7 @@
         </div>
 
         <div id="player_controls" class="hidden">
-            <div>Current Bet: <span id="current_bet_amount">$10</span></div>
-            <input type="range" id="bet_slider" min="10" max="100" value="10">
+            <div>Current Bet: <input type="number" id="current_bet_amount" value="0" /></div>
             <button id="bet_button">Bet</button>
             <button id="fold_button">Fold</button>
         </div>
