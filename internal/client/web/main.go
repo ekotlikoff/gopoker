@@ -26,6 +26,16 @@ const (
 	club    int32 = 8
 )
 
+var (
+	prettySuits = map[int32]string{
+		1: "\u2660", // spades
+		2: "\u2764", // hearts
+		4: "\u2666", // diamonds
+		8: "\u2663", // clubs
+	}
+	strRanks = "23456789TJQKA"
+)
+
 type Client struct {
 	document js.Value
 	client   *http.Client
@@ -337,7 +347,7 @@ func (c *Client) renderFullTable(table tableserver.SerializableTable) {
 			if c.player != nil && c.player.Name == player.Name {
 				c.sitting = true
 			}
-			chipsDiv := seat.Call("querySelector", ".player_chips")
+			chipsDiv := seat.Call("querySelector", ".player_funds")
 			if player.Funds > 0 {
 				chipsDiv.Set("textContent", fmt.Sprintf("Chips: %d", player.Funds))
 			} else {
@@ -433,7 +443,13 @@ func (c *Client) renderHoleCards(cards []poker.Card) {
 		} else {
 			cardDiv.Get("classList").Call("add", "red")
 		}
-		cardDiv.Set("textContent", card.String())
+		rankDiv := c.document.Call("createElement", "div")
+		rankDiv.Set("textContent", string(strRanks[card.Rank()]))
+		suitDiv := c.document.Call("createElement", "div")
+		suitDiv.Set("className", "suit")
+		suitDiv.Set("textContent", prettySuits[card.Suit()])
+		cardDiv.Call("appendChild", rankDiv)
+		cardDiv.Call("appendChild", suitDiv)
 		playerHand.Call("appendChild", cardDiv)
 	}
 }
@@ -454,7 +470,13 @@ func (c *Client) renderCommunityCards(cards []poker.Card) {
 		} else {
 			cardDiv.Get("classList").Call("add", "red")
 		}
-		cardDiv.Set("textContent", card.String())
+		rankDiv := c.document.Call("createElement", "div")
+		rankDiv.Set("textContent", string(strRanks[card.Rank()]))
+		suitDiv := c.document.Call("createElement", "div")
+		suitDiv.Set("className", "suit")
+		suitDiv.Set("textContent", prettySuits[card.Suit()])
+		cardDiv.Call("appendChild", rankDiv)
+		cardDiv.Call("appendChild", suitDiv)
 		communityCardsDiv.Call("appendChild", cardDiv)
 	}
 }
