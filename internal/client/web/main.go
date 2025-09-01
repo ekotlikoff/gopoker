@@ -227,6 +227,12 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 			c.renderBets(update.PlayerUpdate.CurrentBets)
 			c.renderPot(update.PlayerUpdate.Pot)
 			c.renderFunds(update.PlayerUpdate.CurrentFunds)
+		case tableserver.DealUpdateT:
+			c.renderCommunityCards(update.PlayerUpdate.Board)
+		case tableserver.HandOverUpdateT:
+			// TODO display winner somehow
+			communityCardsDiv := c.document.Call("getElementById", "community_cards")
+			communityCardsDiv.Set("innerHTML", "")
 		}
 	case gateway.TableActionResponseT:
 		if update.TableActionResponse.Err != nil {
@@ -418,6 +424,17 @@ func (c *Client) renderHoleCards(cards []poker.Card) {
 func (c *Client) renderPot(pot int) {
 	potDiv := c.document.Call("getElementById", "pot")
 	potDiv.Set("textContent", fmt.Sprintf("Pot: %d", pot))
+}
+
+func (c *Client) renderCommunityCards(cards []poker.Card) {
+	communityCardsDiv := c.document.Call("getElementById", "community_cards")
+	communityCardsDiv.Set("innerHTML", "")
+	for _, card := range cards {
+		cardDiv := c.document.Call("createElement", "div")
+		cardDiv.Set("className", "card")
+		cardDiv.Set("textContent", card.String())
+		communityCardsDiv.Call("appendChild", cardDiv)
+	}
 }
 
 func (c *Client) renderFunds(funds []int) {
