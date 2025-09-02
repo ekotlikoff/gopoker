@@ -657,12 +657,10 @@ func (ts *TableServer) serveTable(t *Table) error {
 		log.Println("hand over")
 		t.sendPlayerUpdates(newHandOverUpdate(winners))
 		standers := t.table.HandleStanders()
-		if standers != nil {
-			for _, p := range standers {
-				a := StandTableAction(t.name, t.players[p])
-				t.sendPlayerUpdates(newTableUpdate(a))
-				t.sendPlayerUpdates(newStateUpdate(false, standers))
-			}
+		for _, p := range standers {
+			a := StandTableAction(t.name, t.players[p])
+			t.sendPlayerUpdates(newTableUpdate(a))
+			t.sendPlayerUpdates(newStateUpdate(false, standers))
 		}
 		t.clock.sleep(t.getTimeBetweenHands())
 
