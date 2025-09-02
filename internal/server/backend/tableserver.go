@@ -50,7 +50,7 @@ const (
 	HandOverUpdateT
 	// FullUpdateT is the full update including the entire table's state.
 	FullUpdateT
-	// TableUpdateT is a table action e.g. a pause, somewhat standing up, etc.
+	// TableUpdateT is a table action e.g. a pause, someone standing up, etc.
 	TableUpdateT
 	// StateUpdateT is an update to table state - table no longer playing, etc.
 	StateUpdateT
@@ -135,6 +135,7 @@ type (
 		AdminName   string
 		Table       model.SerializableTable
 		Playing     bool
+		Paused      bool
 	}
 	// Table is an instance of an ongoing game the TableServer is hosting.
 	Table struct {
@@ -147,6 +148,7 @@ type (
 		playing     bool
 		pauseChan   chan struct{}
 		unpauseChan chan struct{}
+		paused      bool
 		players     map[string]*Player
 	}
 	// TableServer is the server that orchestrates one or more ongoing Tables.
@@ -455,6 +457,9 @@ func (p *Player) GetTableResponse() TableActionResponse {
 
 // SendRoundAction sends a round action to the server.
 func (p *Player) SendRoundAction(a model.RoundAction) {
+	if p.table.paused {
+		return
+	}
 	p.requestChan <- a
 }
 
@@ -536,6 +541,7 @@ func (t *Table) SerializableTable(p *Player) SerializableTable {
 		AdminName:   t.adminName,
 		Table:       t.table.SerializableTable(p.GetName()),
 		Playing:     t.playing,
+		Paused:      t.paused,
 	}
 }
 
@@ -652,7 +658,11 @@ func (ts *TableServer) serveTable(t *Table) error {
 		t.sendPlayerUpdates(newHandOverUpdate(winners))
 		standers := t.table.HandleStanders()
 		if standers != nil {
-			t.sendPlayerUpdates(newStateUpdate(false, standers))
+			for _, p := range standers {
+				a := StandTableAction(t.name, t.players[p])
+				t.sendPlayerUpdates(newTableUpdate(a))
+				t.sendPlayerUpdates(newStateUpdate(false, standers))
+			}
 		}
 		t.clock.sleep(t.getTimeBetweenHands())
 
@@ -662,10 +672,19 @@ func (ts *TableServer) serveTable(t *Table) error {
 func (t *Table) handlePause() {
 	select {
 	case <-t.pauseChan:
+		t.updatePaused(true)
 		<-t.unpauseChan
+		log.Println("unpaused")
+		t.updatePaused(false)
 	default:
 	}
 
+}
+
+func (t *Table) updatePaused(p bool) {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	t.paused = p
 }
 
 func (t *Table) currentBets() []int {
@@ -823,7 +842,9 @@ func getPlayerAction(timeRemaining time.Duration, player *Player, t *Table) (mod
 		select {
 		case <-t.pauseChan:
 			elapsedTime += t.clock.now().Sub(n)
+			t.updatePaused(true)
 			<-t.unpauseChan
+			t.updatePaused(false)
 		case action = <-player.requestChan:
 			return action, elapsedTime + t.clock.now().Sub(n)
 		case <-afterChan:

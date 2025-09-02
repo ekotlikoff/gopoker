@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"strconv"
@@ -44,7 +45,6 @@ type Client struct {
 	table    tableserver.SerializableTable
 	tables   []model.TableSummary
 	sitting  bool
-	playing  bool
 	bigBlind int
 }
 
@@ -254,46 +254,58 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 		}
 	case gateway.TableActionResponseT:
 		if update.TableActionResponse.Err != nil {
+			log.Println("error", update.TableActionResponse.TableAction.TableActionType)
 			// TODO: display error to user
 			return nil
 		}
 		switch update.TableActionResponse.TableAction.TableActionType {
 		case tableserver.Sit:
-			if update.TableActionResponse.Err == nil {
-				c.sitting = true
-				// Show the stand button
-				c.document.Call("getElementById", "stand_button").Get("classList").Call("remove", "hidden")
-				// Hide the sit buttons
-				for i := 0; i < model.MaxTableSize; i++ {
-					seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
-					sitButton := seat.Call("querySelector", ".sit_down_button")
-					sitButton.Get("classList").Call("add", "hidden")
-				}
+			c.sitting = true
+			// Show the stand button
+			c.document.Call("getElementById", "stand_button").Get("classList").Call("remove", "hidden")
+			// Hide the sit buttons
+			for i := 0; i < model.MaxTableSize; i++ {
+				seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
+				sitButton := seat.Call("querySelector", ".sit_down_button")
+				sitButton.Get("classList").Call("add", "hidden")
 			}
 		case tableserver.Stand:
-			if update.TableActionResponse.Err == nil {
-				c.sitting = false
-				// Hide the stand button
-				c.document.Call("getElementById", "stand_button").Get("classList").Call("add", "hidden")
-				// Show the sit buttons
-				for i := 0; i < model.MaxTableSize; i++ {
-					seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
-					player := seat.Call("querySelector", ".player_name").Get("textContent").String()
-					if player == "" {
-						seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
-						sitButton := seat.Call("querySelector", ".sit_down_button")
-						sitButton.Get("classList").Call("remove", "hidden")
-					}
-				}
-			}
+			// TODO display a pending stand... in the UI, and display a cancel stand button.
 		case tableserver.Join:
 			// TODO
 		case tableserver.Leave:
 			// TODO
 		case tableserver.Create:
 			// TODO
+		case tableserver.Unpause:
+			// TODO remove UI showing pause
+			if c.player.Name == c.table.AdminName {
+				pauseButton := c.document.Call("getElementById", "pause_game_button")
+				pauseButton.Get("classList").Call("remove", "hidden")
+				pauseButton.Set("onclick", js.FuncOf(c.pause))
+				unpauseButton := c.document.Call("getElementById", "unpause_game_button")
+				unpauseButton.Get("classList").Call("add", "hidden")
+				unpauseButton.Set("onclick", js.FuncOf(c.unpause))
+			}
+		case tableserver.Pause:
+			// TODO add UI showing pause
+			if c.player.Name == c.table.AdminName {
+				pauseButton := c.document.Call("getElementById", "pause_game_button")
+				pauseButton.Get("classList").Call("add", "hidden")
+				pauseButton.Set("onclick", js.FuncOf(c.pause))
+				unpauseButton := c.document.Call("getElementById", "unpause_game_button")
+				unpauseButton.Get("classList").Call("remove", "hidden")
+				unpauseButton.Set("onclick", js.FuncOf(c.unpause))
+			}
 		case tableserver.Start:
-			// TODO
+			if c.player.Name == c.table.AdminName {
+				pauseButton := c.document.Call("getElementById", "pause_game_button")
+				pauseButton.Get("classList").Call("remove", "hidden")
+				pauseButton.Set("onclick", js.FuncOf(c.pause))
+				startButton := c.document.Call("getElementById", "start_game_button")
+				startButton.Get("classList").Call("add", "hidden")
+				startButton.Set("onclick", js.FuncOf(c.start))
+			}
 		}
 	case gateway.RoundActionResponseT:
 		if update.RoundActionResponse.Err == nil {
@@ -324,13 +336,31 @@ func (c *Client) handleTableUpdate(action tableserver.TableAction) {
 		playerName.Set("textContent", action.PlayerName)
 		seat.Call("querySelector", ".sit_down_button").Get("classList").Call("add", "hidden")
 	case tableserver.Stand:
-		seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", action.Seat))
-		playerName := seat.Call("querySelector", ".player_name")
-		playerName.Set("textContent", "")
-		if !c.sitting {
-			seat.Call("querySelector", ".sit_down_button").Get("classList").Call("remove", "hidden")
+		// TODO hide the standing... UI
+		c.removePlayer(action.Seat)
+		if action.PlayerName == c.player.Name {
+			c.sitting = false
+			// Hide the stand button
+			c.document.Call("getElementById", "stand_button").Get("classList").Call("add", "hidden")
+			// Show the sit buttons
+			for i := 0; i < model.MaxTableSize; i++ {
+				seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
+				player := seat.Call("querySelector", ".player_name").Get("textContent").String()
+				if player == "" {
+					seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
+					sitButton := seat.Call("querySelector", ".sit_down_button")
+					sitButton.Get("classList").Call("remove", "hidden")
+				}
+			}
 		}
 	}
+}
+
+func (c *Client) removePlayer(s int) {
+	seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", s))
+	seat.Call("querySelector", ".player_name").Set("textContent", "")
+	seat.Call("querySelector", ".player_bet").Set("textContent", "")
+	seat.Call("querySelector", ".player_funds").Set("textContent", "")
 }
 
 func (c *Client) renderFullTable(table tableserver.SerializableTable) {
@@ -375,10 +405,20 @@ func (c *Client) renderFullTable(table tableserver.SerializableTable) {
 		}
 	}
 
-	if c.player.Name == table.AdminName && !table.Playing {
-		startButton := c.document.Call("getElementById", "start_game_button")
-		startButton.Get("classList").Call("remove", "hidden")
-		startButton.Set("onclick", js.FuncOf(c.start))
+	if c.player.Name == table.AdminName {
+		if table.Paused {
+			unpauseButton := c.document.Call("getElementById", "unpause_game_button")
+			unpauseButton.Get("classList").Call("remove", "hidden")
+			unpauseButton.Set("onclick", js.FuncOf(c.unpause))
+		} else if table.Playing {
+			pauseButton := c.document.Call("getElementById", "pause_game_button")
+			pauseButton.Get("classList").Call("remove", "hidden")
+			pauseButton.Set("onclick", js.FuncOf(c.pause))
+		} else {
+			startButton := c.document.Call("getElementById", "start_game_button")
+			startButton.Get("classList").Call("remove", "hidden")
+			startButton.Set("onclick", js.FuncOf(c.start))
+		}
 	}
 
 	standButton := c.document.Call("getElementById", "stand_button")
@@ -429,6 +469,16 @@ func (c *Client) fold(this js.Value, args []js.Value) interface{} {
 
 func (c *Client) start(this js.Value, args []js.Value) interface{} {
 	c.send(gateway.PlayerRequest{Type: gateway.TableActionT, TableAction: tableserver.TableAction{TableActionType: tableserver.Start, TableName: c.table.Name}})
+	return nil
+}
+
+func (c *Client) pause(this js.Value, args []js.Value) interface{} {
+	c.send(gateway.PlayerRequest{Type: gateway.TableActionT, TableAction: tableserver.TableAction{TableActionType: tableserver.Pause, TableName: c.table.Name}})
+	return nil
+}
+
+func (c *Client) unpause(this js.Value, args []js.Value) interface{} {
+	c.send(gateway.PlayerRequest{Type: gateway.TableActionT, TableAction: tableserver.TableAction{TableActionType: tableserver.Unpause, TableName: c.table.Name}})
 	return nil
 }
 
