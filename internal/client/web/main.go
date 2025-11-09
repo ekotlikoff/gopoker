@@ -82,6 +82,7 @@ func (c *Client) login(this js.Value, args []js.Value) interface{} {
 	go func() {
 		if err := c.post("login", map[string]string{"username": username}); err != nil {
 			// Handle error, e.g., show a message to the user
+			log.Println("login failed")
 			return
 		}
 		c.player = model.NewPlayer(username)
@@ -96,7 +97,7 @@ func (c *Client) login(this js.Value, args []js.Value) interface{} {
 
 func (c *Client) getSession() bool {
 	resp, err := c.client.Get("session")
-	if err != nil || resp.StatusCode != http.StatusOK {
+	if err != nil || resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return false
 	}
 	defer resp.Body.Close()
@@ -170,7 +171,7 @@ func (c *Client) createTable(this js.Value, args []js.Value) interface{} {
 
 	go func() {
 		if err := c.post("tables", map[string]string{"name": tableName}); err != nil {
-			// Handle error, e.g., show a message to the user
+			log.Println("Failed to create a table")
 			return
 		}
 		c.joinTable(tableName)
@@ -188,6 +189,9 @@ func (c *Client) post(endpoint string, data interface{}) error {
 	resp, err := c.client.Post(endpoint, "application/json", bytes.NewBuffer(jsonBytes))
 	if err != nil {
 		return err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return fmt.Errorf(resp.Status)
 	}
 	defer resp.Body.Close()
 	return nil
@@ -208,6 +212,8 @@ func (c *Client) connect(tableName string) {
 
 	c.conn = js.Global().Get("WebSocket").New(protocol + "://" + host + pathname + "ws?table=" + tableName)
 	if c.conn.IsUndefined() {
+		log.Println("Websocket connection is undefined.")
+	        c.showLobby()
 		return
 	}
 
@@ -215,6 +221,11 @@ func (c *Client) connect(tableName string) {
 		return nil
 	}))
 	c.conn.Set("onmessage", js.FuncOf(c.onMessage))
+	c.conn.Set("onclose", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+	    log.Println("Websocket connection closed, returning to lobby")
+	    c.showLobby()
+	    return nil
+	}))
 }
 
 func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
