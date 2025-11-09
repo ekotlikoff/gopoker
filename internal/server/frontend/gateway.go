@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"errors"
 	"time"
 
 	model "github.com/ekotlikoff/gopoker/internal/model/table"
@@ -249,22 +250,23 @@ func (gw *Gateway) login(w http.ResponseWriter, r *http.Request) {
 
 	if player == nil {
 		if req.Username == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("Missing username"))
+			http.Error(w, "Missing username", http.StatusBadRequest)
 			return
 		}
 		sessionToken, err := uuid.NewV4()
 		if err != nil {
-			log.Println("Failed to generate session token")
-			w.WriteHeader(http.StatusInternalServerError)
+			http.Error(w, "Failed to generate session token", http.StatusInternalServerError)
 			return
 		}
 		sessionTokenStr := sessionToken.String()
 		player = tableserver.NewPlayer(req.Username)
 		err = sessionCache.Put(sessionTokenStr, player)
+		if errors.Is(err, ErrUsernameTaken) {
+			http.Error(w, "Username Taken", http.StatusBadRequest)
+			return
+		}
 		if err != nil {
-			log.Println("Failed to store session token in sessionCache")
-			w.WriteHeader(http.StatusInternalServerError)
+			http.Error(w, "Failed to store session token in sessionCache", http.StatusInternalServerError)
 			return
 		}
 		http.SetCookie(w, &http.Cookie{
