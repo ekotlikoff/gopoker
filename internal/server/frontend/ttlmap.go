@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sync"
 	"time"
+	"fmt"
 
 	tableserver "github.com/ekotlikoff/gopoker/internal/server/backend"
 )
@@ -15,15 +16,18 @@ type item struct {
 	lastAccess int64
 }
 
-// TTLMap is a map with a TTL
+// TTLMap is a map with a TTL and prevents duplicate usernames.
 type TTLMap struct {
 	m map[string]*item
+	usernames map[string]struct{}
 	l sync.Mutex
 }
 
+var ErrUsernameTaken = errors.New("username taken")
+
 // NewTTLMap creates a new map
 func NewTTLMap(ln int, maxTTL int, gcFrequencySecs int) (m *TTLMap) {
-	m = &TTLMap{m: make(map[string]*item, ln)}
+	m = &TTLMap{m: make(map[string]*item, ln), usernames: make(map[string]struct{}, ln)}
 	go func() {
 		gcFrequency := time.Tick(time.Second * time.Duration(gcFrequencySecs))
 		for now := range gcFrequency {
@@ -31,6 +35,7 @@ func NewTTLMap(ln int, maxTTL int, gcFrequencySecs int) (m *TTLMap) {
 			for k, v := range m.m {
 				if now.Unix()-v.lastAccess > int64(maxTTL) {
 					delete(m.m, k)
+					delete(m.usernames, v.value.GetName())
 				}
 			}
 			m.l.Unlock()
@@ -50,13 +55,17 @@ func (m *TTLMap) Len() int {
 func (m *TTLMap) Put(k string, v *tableserver.Player) error {
 	m.l.Lock()
 	defer m.l.Unlock()
+	if _, ok := m.usernames[v.GetName()]; ok {
+		return fmt.Errorf("%w: %s", ErrUsernameTaken, v.GetName())
+	}
 	_, ok := m.m[k]
 	if !ok {
 		it := &item{value: v}
 		it.lastAccess = time.Now().Unix()
 		m.m[k] = it
+		m.usernames[v.GetName()] = struct{}{}
 	} else {
-		return errors.New("failed to put key: " + k + ", value: " + v.GetName())
+		return fmt.Errorf("failed to put key: %s, values: %s", k, v.GetName())
 	}
 	return nil
 }
