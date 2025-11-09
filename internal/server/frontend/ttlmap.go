@@ -50,14 +50,13 @@ func (m *TTLMap) Len() int {
 func (m *TTLMap) Put(k string, v *tableserver.Player) error {
 	m.l.Lock()
 	_, ok := m.m[k]
-	var it item
 	if !ok {
 		it := &item{value: v}
+		it.lastAccess = time.Now().Unix()
 		m.m[k] = it
 	} else {
 		return errors.New("failed to put key: " + k + ", value: " + v.GetName())
 	}
-	it.lastAccess = time.Now().Unix()
 	m.l.Unlock()
 	return nil
 }
