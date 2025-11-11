@@ -242,6 +242,8 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 			c.renderFullTable(update.PlayerUpdate.Table)
 			c.table = update.PlayerUpdate.Table
 		case tableserver.NewHandUpdateT:
+			communityCardsDiv := c.document.Call("getElementById", "community_cards")
+			communityCardsDiv.Set("innerHTML", "")
 			c.renderHoleCards(update.PlayerUpdate.Hole)
 			c.bigBlind = update.PlayerUpdate.BigBlind
 			c.renderBets(update.PlayerUpdate.CurrentBets)
@@ -252,6 +254,8 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 			c.document.Call("getElementById", "player_controls").Get("classList").Call("remove", "hidden")
 		case tableserver.TableUpdateT:
 			c.handleTableUpdate(update.PlayerUpdate.TableAction)
+		case tableserver.StateUpdateT:
+			c.handleStateUpdate(update.PlayerUpdate.StateUpdate)
 		case tableserver.RoundUpdateT:
 			c.renderBets(update.PlayerUpdate.CurrentBets)
 			c.renderPot(update.PlayerUpdate.Pot)
@@ -260,8 +264,6 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 			c.renderCommunityCards(update.PlayerUpdate.Board)
 		case tableserver.HandOverUpdateT:
 			// TODO display winner somehow
-			communityCardsDiv := c.document.Call("getElementById", "community_cards")
-			communityCardsDiv.Set("innerHTML", "")
 		}
 	case gateway.TableActionResponseT:
 		if update.TableActionResponse.Err != nil {
@@ -363,6 +365,23 @@ func (c *Client) handleTableUpdate(action tableserver.TableAction) {
 					sitButton.Get("classList").Call("remove", "hidden")
 				}
 			}
+		}
+	}
+}
+
+func (c *Client) handleStateUpdate(stateUpdate tableserver.StateUpdate) {
+	if stateUpdate.PlayStopped {
+		communityCardsDiv := c.document.Call("getElementById", "community_cards")
+		communityCardsDiv.Set("innerHTML", "")
+		playerHand := c.document.Call("getElementById", "player_hand")
+		playerHand.Set("innerHTML", "")
+		if c.player.Name == c.table.AdminName {
+			startButton := c.document.Call("getElementById", "start_game_button")
+			startButton.Get("classList").Call("remove", "hidden")
+			startButton.Set("onclick", js.FuncOf(c.start))
+			pauseButton := c.document.Call("getElementById", "pause_game_button")
+			pauseButton.Get("classList").Call("add", "hidden")
+			pauseButton.Set("onclick", js.FuncOf(c.pause))
 		}
 	}
 }
