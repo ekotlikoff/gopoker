@@ -293,6 +293,7 @@ func StandTableAction(t string, p *Player) TableAction {
 		TableName:       t,
 		PlayerName:      p.GetName(),
 		player:          p,
+		Seat:            p.GetSeat(),
 	}
 }
 
