@@ -4,9 +4,9 @@ package gateway
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"time"
-	"fmt"
 
 	tableserver "github.com/ekotlikoff/gopoker/internal/server/backend"
 )
@@ -18,9 +18,9 @@ type item struct {
 
 // TTLMap is a map with a TTL and prevents duplicate usernames.
 type TTLMap struct {
-	m map[string]*item
+	m         map[string]*item
 	usernames map[string]struct{}
-	l sync.Mutex
+	l         sync.Mutex
 }
 
 var ErrUsernameTaken = errors.New("username taken")

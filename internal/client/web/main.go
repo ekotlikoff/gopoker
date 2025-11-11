@@ -213,7 +213,7 @@ func (c *Client) connect(tableName string) {
 	c.conn = js.Global().Get("WebSocket").New(protocol + "://" + host + pathname + "ws?table=" + tableName)
 	if c.conn.IsUndefined() {
 		log.Println("Websocket connection is undefined.")
-	        c.showLobby()
+		c.showLobby()
 		return
 	}
 
@@ -222,9 +222,9 @@ func (c *Client) connect(tableName string) {
 	}))
 	c.conn.Set("onmessage", js.FuncOf(c.onMessage))
 	c.conn.Set("onclose", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-	    log.Println("Websocket connection closed, returning to lobby")
-	    c.showLobby()
-	    return nil
+		log.Println("Websocket connection closed, returning to lobby")
+		c.showLobby()
+		return nil
 	}))
 }
 

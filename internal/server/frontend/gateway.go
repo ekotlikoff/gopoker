@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -11,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"errors"
 	"time"
 
 	model "github.com/ekotlikoff/gopoker/internal/model/table"
