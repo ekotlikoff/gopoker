@@ -23,6 +23,7 @@ type TTLMap struct {
 	l         sync.Mutex
 }
 
+// ErrUsernameTaken means the username is currently taken and unavailable for use.
 var ErrUsernameTaken = errors.New("username taken")
 
 // NewTTLMap creates a new map
