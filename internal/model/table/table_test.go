@@ -19,8 +19,8 @@ func TestStartHand(t *testing.T) {
 	if table.Hand.Dealer().Name != "Anna" {
 		t.Error("expected Anna as dealer got", table.Hand.Dealer().Name)
 	}
-	if RingToPlayer(table.Hand.FirstToBet).Name != "Nora" {
-		t.Error("expected Nora as first better got", RingToPlayer(table.Hand.FirstToBet).Name)
+	if table.Hand.FirstToBet != nil {
+		t.Error("expected nil first better got", RingToPlayer(table.Hand.FirstToBet).Name)
 	}
 	if RingToPlayer(table.Hand.Round.BetTurn).Name != "Nora" {
 		t.Error("expected Nora as next better got", RingToPlayer(table.Hand.Round.BetTurn).Name)
@@ -242,6 +242,84 @@ func TestFold(t *testing.T) {
 		t.Error("expected 1200 got", totalFunds)
 	}
 	table.NewHand()
+}
+
+func TestFirstBetterFolds(t *testing.T) {
+	table := NewTableWithConfig(TableConfig{
+		minBet: DefaultMinBet,
+	})
+	leto := NewPlayerWithFunds("Leto", 400)
+	table.SitDown(leto, 0)
+	paul := NewPlayerWithFunds("Paul", 400)
+	table.SitDown(paul, 2)
+	frank := NewPlayerWithFunds("Frank", 400)
+	table.SitDown(frank, 3)
+	table.NewHand()
+	table.Hand.StartHand()
+	if table.Hand.Players.Len() != 3 {
+		t.Error("expected 3 players, got", table.Hand.Players.Len())
+	}
+	err := table.Hand.PlayerAction(table.Players[0], RoundAction{Fold, 0})
+	if err != nil {
+		t.Error(err)
+	}
+	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 200})
+	if err != nil {
+		t.Log(table)
+		t.Error(err)
+	}
+	err = table.Hand.PlayerAction(table.Players[3], RoundAction{Call, 200})
+	if err != nil {
+		t.Log(table)
+		t.Error(err)
+	}
+	err = table.Hand.Deal()
+	if err != nil {
+		t.Log(table)
+		t.Error(err)
+	}
+}
+
+func TestRaiseAndCall(t *testing.T) {
+	table := NewTableWithConfig(TableConfig{
+		minBet: DefaultMinBet,
+	})
+	leto := NewPlayerWithFunds("Leto", 400)
+	table.SitDown(leto, 0)
+	paul := NewPlayerWithFunds("Paul", 400)
+	table.SitDown(paul, 2)
+	frank := NewPlayerWithFunds("Frank", 400)
+	table.SitDown(frank, 3)
+	table.NewHand()
+	table.Hand.StartHand()
+	if table.Hand.Players.Len() != 3 {
+		t.Error("expected 3 players, got", table.Hand.Players.Len())
+	}
+	err := table.Hand.PlayerAction(table.Players[0], RoundAction{Fold, 0})
+	if err != nil {
+		t.Error(err)
+	}
+	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 200})
+	if err != nil {
+		t.Log(table)
+		t.Error(err)
+	}
+	err = table.Hand.PlayerAction(table.Players[3], RoundAction{Raise, 400})
+	if err != nil {
+		t.Log(table)
+		t.Error(err)
+	}
+	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 400})
+	if err != nil {
+		t.Log(table)
+		t.Error(err)
+		t.Errorf("expected the round of betting to continue after a raise, got error: %v", err)
+	}
+	err = table.Hand.Deal()
+	if err != nil {
+		t.Log(table)
+		t.Error(err)
+	}
 }
 
 func TestRematchPlayerOutOfFunds(t *testing.T) {

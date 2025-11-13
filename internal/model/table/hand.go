@@ -217,7 +217,6 @@ func (hand *Hand) startBets() {
 		hand.Round.BetTurn = hand.Players
 	}
 	hand.nextBetter()
-	hand.FirstToBet = hand.Round.BetTurn
 }
 
 func (hand *Hand) playerBet(player *Player, bet int) error {
@@ -232,6 +231,9 @@ func (hand *Hand) playerBet(player *Player, bet int) error {
 			return errors.New("cannot raise less than the big blind")
 		}
 		hand.Round.CurrentBet = bet
+		hand.FirstToBet = hand.Round.BetTurn
+	}
+	if hand.FirstToBet == nil {
 		hand.FirstToBet = hand.Round.BetTurn
 	}
 	if allIn {
