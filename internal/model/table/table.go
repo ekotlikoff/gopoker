@@ -55,7 +55,6 @@ type (
 		Standing      bool
 		WantToStandUp bool
 		SeatIndex     int
-		Playing       bool
 		AllIn         bool
 		Hole          []poker.Card
 		Funds         int
@@ -194,10 +193,10 @@ func (t *Table) StartHand() error {
 
 func (t *Table) incrementDealerIndex() error {
 	log.Printf("dealer index: %d\n", t.DealerIndex)
-	for i := 1; i < len(t.Players); i++ {
+	for i := 1; i <= len(t.Players); i++ {
 		dealerIndex := (i + t.DealerIndex) % len(t.Players)
 		p := t.Players[dealerIndex]
-		if p != nil && p.Playing && i != t.DealerIndex {
+		if p != nil && i != t.DealerIndex {
 			log.Printf("found player: %s, index: %d", p.Name, dealerIndex)
 			t.DealerIndex = dealerIndex
 			return nil
@@ -276,7 +275,6 @@ func (t *Table) HandleStanders() []string {
 	var newStanders []string
 	for i, p := range t.Players {
 		if p != nil && p.WantToStandUp {
-			t.Players[i].Playing = false
 			t.Players[i].Standing = true
 			t.Players[i].WantToStandUp = false
 			t.Players[i] = nil
@@ -291,7 +289,6 @@ func (t *Table) HandleStanders() []string {
 func (p *Player) StandNow() {
 	p.table.mutex.Lock()
 	defer p.table.mutex.Unlock()
-	p.Playing = false
 	p.Standing = true
 	p.WantToStandUp = false
 	p.table.Players[p.SeatIndex] = nil
@@ -343,16 +340,16 @@ func (t *Table) HandlePlayerAction(p *Player, action RoundAction) error {
 func (p Player) String() string {
 	cards := ""
 	betAmount := ""
-	if p.Playing {
-		if len(p.Hole) > 0 {
-			cards = ", Cards: "
-		}
-		for _, c := range p.Hole {
-			cards += fmt.Sprint(c) + " "
-		}
-		betAmount = fmt.Sprintf(", BetAmount: %d", p.BetAmount)
+	if len(p.Hole) > 0 {
+		cards = ", Cards: "
+	}
+	for _, c := range p.Hole {
+		cards += fmt.Sprint(c) + " "
+	}
+	if p.Standing {
+		betAmount = ", standing"
 	} else {
-		betAmount = ", not playing"
+		betAmount = fmt.Sprintf(", BetAmount: %d", p.BetAmount)
 	}
 	return fmt.Sprintf("%s, funds: %v%v %s", p.Name, p.Funds, betAmount, cards)
 }

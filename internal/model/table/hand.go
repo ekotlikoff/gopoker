@@ -70,11 +70,13 @@ type (
 )
 
 // NewHand create a hand
-func (t *Table) NewHand() {
+func (t *Table) NewHand() error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	if t.Players[t.DealerIndex] == nil {
-		t.incrementDealerIndex()
+		if err := t.incrementDealerIndex(); err != nil {
+			return err
+		}
 	}
 	players, pot := t.playersForHand()
 	t.Hand = &Hand{
@@ -83,6 +85,7 @@ func (t *Table) NewHand() {
 		Players:     players,
 		Pot:         pot,
 	}
+	return nil
 }
 
 // FinishHand ends a hand and handles standing players up
@@ -119,7 +122,6 @@ func (hand *Hand) StartHand() error {
 	hand.Deck.Shuffle()
 	player := hand.Players
 	for i := 0; i < hand.Players.Len(); i++ {
-		RingToPlayer(player).Playing = true
 		hand.dealHole(RingToPlayer(player))
 		player = player.Next()
 	}

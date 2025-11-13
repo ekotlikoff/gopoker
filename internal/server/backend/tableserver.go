@@ -601,6 +601,9 @@ func (ts *TableServer) start(a TableAction) error {
 	ts.mutex.Lock()
 	table, ok := ts.tables[a.TableName]
 	ts.mutex.Unlock()
+	if table.PlayerCount() < 2 {
+		return fmt.Errorf("insufficient players")
+	}
 	if !ok {
 		return fmt.Errorf("no such table %q", a.TableName)
 	} else if a.player.playerModel.Name != table.adminName {
@@ -630,7 +633,12 @@ func (ts *TableServer) serveTable(t *Table) error {
 	t.setPlaying(true)
 	for {
 		t.handlePause()
-		t.table.NewHand()
+		if err := t.table.NewHand(); err != nil {
+			t.sendPlayerUpdates(newStateUpdate(true, nil))
+			t.setPlaying(false)
+			log.Print(err)
+			return err
+		}
 		if err := t.table.StartHand(); err != nil {
 			t.sendPlayerUpdates(newStateUpdate(true, nil))
 			t.setPlaying(false)

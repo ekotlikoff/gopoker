@@ -16,11 +16,17 @@ func TestStartHand(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	if table.Hand.Dealer().Name != "Anna" {
+		t.Error("expected Anna as dealer got", table.Hand.Dealer().Name)
+	}
 	if RingToPlayer(table.Hand.FirstToBet).Name != "Nora" {
 		t.Error("expected Nora as first better got", RingToPlayer(table.Hand.FirstToBet).Name)
 	}
 	if RingToPlayer(table.Hand.Round.BetTurn).Name != "Nora" {
 		t.Error("expected Nora as next better got", RingToPlayer(table.Hand.Round.BetTurn).Name)
+	}
+	if table.Players[0].BetAmount != 0 {
+		t.Error("blinds not taken correctly", table.Players[0].BetAmount)
 	}
 	if table.Players[2].BetAmount != 100 {
 		t.Error("blinds not taken correctly", table.Players[2].BetAmount)
@@ -39,10 +45,10 @@ func TestStartHandAllInSmallBlind(t *testing.T) {
 	hand := table.Hand
 	fmt.Println(hand)
 	fmt.Println(hand.StartHand())
-	if table.Players[2].BetAmount != 200 {
+	if table.Players[0].BetAmount != 100 {
 		t.Error("blinds not taken correctly", table.Players[2].BetAmount)
 	}
-	if table.Players[0].BetAmount != 100 {
+	if table.Players[2].BetAmount != 200 {
 		t.Error("blinds not taken correctly", table.Players[0].BetAmount)
 	}
 	if !hand.Round.RoundDone {
