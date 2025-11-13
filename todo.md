@@ -1,4 +1,5 @@
 ### TODO
+1. Hide cards after folding
 1. Make chip count prettier
 1. Make pot prettier (maybe 5 thresholds, above which there are 5 different visualizations of chip stacks)
 1. Make it clear which player you are
