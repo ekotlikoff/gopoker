@@ -244,6 +244,7 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 		case tableserver.NewHandUpdateT:
 			communityCardsDiv := c.document.Call("getElementById", "community_cards")
 			communityCardsDiv.Set("innerHTML", "")
+			c.renderDealer(update.PlayerUpdate.Dealer)
 			c.renderHoleCards(update.PlayerUpdate.Hole)
 			c.bigBlind = update.PlayerUpdate.BigBlind
 			c.renderBets(update.PlayerUpdate.CurrentBets)
@@ -327,6 +328,18 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 	}
 
 	return nil
+}
+
+func (c *Client) renderDealer(dealerName string) {
+	for i := 0; i < model.MaxTableSize; i++ {
+		seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
+		dealerChip := seat.Call("querySelector", ".dealer-chip")
+		dealerChip.Get("classList").Call("add", "hidden")
+		playerName := seat.Call("querySelector", ".player_name").Get("textContent").String()
+		if playerName == dealerName {
+			dealerChip.Get("classList").Call("remove", "hidden")
+		}
+	}
 }
 
 func (c *Client) renderBets(currentBets []int) {
