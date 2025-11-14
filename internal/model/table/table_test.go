@@ -322,6 +322,47 @@ func TestRaiseAndCall(t *testing.T) {
 	}
 }
 
+func TestNextDealer(t *testing.T) {
+	table := NewTableWithConfig(TableConfig{
+		minBet: DefaultMinBet,
+	})
+	leto := NewPlayerWithFunds("Leto", 800)
+	table.SitDown(leto, 1)
+	paul := NewPlayerWithFunds("Paul", 800)
+	table.SitDown(paul, 2)
+	frank := NewPlayerWithFunds("Frank", 800)
+	table.SitDown(frank, 3)
+	table.NewHand()
+	table.Hand.StartHand()
+	if table.Dealer() != leto {
+		t.Errorf("expected Leto as the better, got %s", table.Dealer().Name)
+	}
+	if table.Hand.Players.Len() != 3 {
+		t.Error("expected 3 players, got", table.Hand.Players.Len())
+	}
+	err := table.Hand.PlayerAction(leto, RoundAction{Fold, 0})
+	if err != nil {
+		t.Error(err)
+	}
+	err = table.Hand.PlayerAction(paul, RoundAction{Fold, 0})
+	if err != nil {
+		t.Error(err)
+	}
+	_, err = table.FinishHand()
+	if err != nil {
+		t.Log(table)
+		t.Error(err)
+	}
+	table.NewHand()
+	table.Hand.StartHand()
+	if table.Hand.Players.Len() != 3 {
+		t.Error("expected 3 players, got", table.Hand.Players.Len())
+	}
+	if table.Dealer() != paul {
+		t.Errorf("expected Paul as the better, got %s", table.Dealer().Name)
+	}
+}
+
 func TestRematchPlayerOutOfFunds(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
 		minBet: DefaultMinBet,

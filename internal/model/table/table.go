@@ -196,7 +196,7 @@ func (t *Table) incrementDealerIndex() error {
 	for i := 1; i <= len(t.Players); i++ {
 		dealerIndex := (i + t.DealerIndex) % len(t.Players)
 		p := t.Players[dealerIndex]
-		if p != nil && i != t.DealerIndex {
+		if p != nil && dealerIndex != t.DealerIndex {
 			log.Printf("found player: %s, index: %d", p.Name, dealerIndex)
 			t.DealerIndex = dealerIndex
 			return nil
