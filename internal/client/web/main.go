@@ -258,6 +258,9 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 		case tableserver.StateUpdateT:
 			c.handleStateUpdate(update.PlayerUpdate.StateUpdate)
 		case tableserver.RoundUpdateT:
+			if update.PlayerUpdate.RoundAction.ActionType == model.Fold && update.PlayerUpdate.CurrentBetter == c.player.Name {
+				c.document.Call("getElementById", "player_hand").Set("innerHTML", "")
+			}
 			c.renderBets(update.PlayerUpdate.CurrentBets)
 			c.renderPot(update.PlayerUpdate.Pot)
 			c.renderFunds(update.PlayerUpdate.CurrentFunds)
