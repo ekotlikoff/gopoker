@@ -585,6 +585,13 @@ func (t *Table) StanderCount() int {
 	return len(t.table.Standers)
 }
 
+// Name gets the name of the table
+func (t *Table) Name() string {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.name
+}
+
 func (t *Table) setPlaying(p bool) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()

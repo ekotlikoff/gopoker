@@ -406,9 +406,14 @@ func (gw *Gateway) Websocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	table := r.URL.Query().Get("table")
+	if player.GetTable() != nil && player.GetTable().Name() != table {
+		log.Println("Player is already at a table")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 	if player.GetTable() == nil {
 		// If player hasn't already joined the table, do so now.
-		table := r.URL.Query().Get("table")
 		gw.TableServer.SendTableAction(tableserver.JoinTableAction(table, player))
 		resp := player.GetTableResponse()
 		if resp.Err != nil {
