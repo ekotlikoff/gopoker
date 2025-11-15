@@ -517,6 +517,10 @@ func (c *Client) renderFullTable(table tableserver.SerializableTable) {
 		} else {
 			c.startGameButton.Get("classList").Call("remove", "hidden")
 		}
+	} else {
+		c.startGameButton.Get("classList").Call("add", "hidden")
+		c.pauseGameButton.Get("classList").Call("add", "hidden")
+		c.unpauseGameButton.Get("classList").Call("add", "hidden")
 	}
 }
 
