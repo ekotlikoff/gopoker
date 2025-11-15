@@ -220,7 +220,7 @@ func (gw *Gateway) Tables(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (gw *Gateway) getTables(w http.ResponseWriter, r *http.Request) {
+func (gw *Gateway) getTables(w http.ResponseWriter, _ *http.Request) {
 	ts := gw.TableServer.GetTables()
 	tableSummaries := make([]model.TableSummary, 0, len(ts))
 	for name, table := range ts {
@@ -442,7 +442,12 @@ func (gw *Gateway) Websocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeLoop(c *websocket.Conn, player *tableserver.Player) {
-	if err := c.WriteJSON(ServerToPlayer{Type: PlayerUpdateT, PlayerUpdate: player.NewFullUpdate()}); err != nil {
+	update, err := player.NewFullUpdate()
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	if err := c.WriteJSON(ServerToPlayer{Type: PlayerUpdateT, PlayerUpdate: update}); err != nil {
 		log.Println("Write error:", err)
 		return
 	}
@@ -463,7 +468,7 @@ func writeLoop(c *websocket.Conn, player *tableserver.Player) {
 			update.TableActionResponse = u
 		case <-ticker.C:
 			if err := c.WriteMessage(websocket.PingMessage, nil); err != nil {
-				log.Println("FATAL Write PingMessage error:", err)
+				log.Println("Write PingMessage error:", err)
 				return
 			}
 			continue

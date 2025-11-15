@@ -354,9 +354,12 @@ func (ts *TableServer) Serve() {
 			if a.player.GetTable().IsPlaying() {
 				a.player.playerModel.StandUp()
 			} else {
-				a.player.playerModel.StandNow()
-				a.Seat = a.player.GetSeat()
-				a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
+				err = a.player.playerModel.StandNow()
+				if err == nil {
+					a.Seat = a.player.GetSeat()
+					a.PlayerName = a.player.GetName()
+					a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
+				}
 			}
 			ts.mutex.Unlock()
 		case Sit:
@@ -385,6 +388,7 @@ func (ts *TableServer) Serve() {
 			err = a.player.playerModel.Leave()
 			if err == nil {
 				a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
+				a.player.table = nil
 			}
 			ts.mutex.Unlock()
 		case Join:
@@ -540,7 +544,7 @@ func (t *Table) SerializableTable(p *Player) SerializableTable {
 		Name:        t.name,
 		TableConfig: t.tableConfig,
 		AdminName:   t.adminName,
-		Table:       t.table.SerializableTable(p.GetName()),
+		Table:       t.table.SerializableTable(p.playerModel.Name),
 		Playing:     t.playing,
 		Paused:      t.paused,
 	}
@@ -777,11 +781,16 @@ func newStateUpdate(playStopped bool, nowStanding []string) *PlayerUpdate {
 }
 
 // NewFullUpdate creates a FullUpdateT from the player's table
-func (p *Player) NewFullUpdate() *PlayerUpdate {
+func (p *Player) NewFullUpdate() (*PlayerUpdate, error) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	if p.table == nil {
+		return nil, fmt.Errorf("%s is not at a table", p.GetName())
+	}
 	return &PlayerUpdate{
 		Type:  FullUpdateT,
 		Table: p.table.SerializableTable(p),
-	}
+	}, nil
 }
 
 func newTableUpdate(a TableAction) *PlayerUpdate {
