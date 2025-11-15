@@ -352,9 +352,9 @@ func (ts *TableServer) Serve() {
 		case Stand:
 			ts.mutex.Lock()
 			if a.player.GetTable().IsPlaying() {
-				a.player.playerModel.StandUp()
+				a.player.StandUp()
 			} else {
-				err = a.player.playerModel.StandNow()
+				err = a.player.StandNow()
 				if err == nil {
 					a.Seat = a.player.GetSeat()
 					a.PlayerName = a.player.GetName()
@@ -377,17 +377,20 @@ func (ts *TableServer) Serve() {
 				a.player.playerModel, a.Seat,
 			)
 			if err == nil {
+				p.mutex.Lock()
 				p.table = table
 				table.players[p.playerModel.Name] = p
-				a.PlayerName = p.GetName()
-				a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
+				a.PlayerName = p.playerModel.Name
+				table.sendPlayerUpdates(newTableUpdate(a))
+				p.mutex.Unlock()
 			}
 			ts.mutex.Unlock()
 		case Leave:
 			ts.mutex.Lock()
-			err = a.player.playerModel.Leave()
+			t := a.player.GetTable()
+			err = a.player.Leave()
 			if err == nil {
-				a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
+				t.sendPlayerUpdates(newTableUpdate(a))
 				a.player.table = nil
 			}
 			ts.mutex.Unlock()
@@ -443,6 +446,27 @@ func (p *Player) GetTable() *Table {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	return p.table
+}
+
+// StandUp from the table
+func (p *Player) StandUp() {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.playerModel.StandUp()
+}
+
+// StandNow from the table
+func (p *Player) StandNow() error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	return p.playerModel.StandNow()
+}
+
+// Leave the table
+func (p *Player) Leave() error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	return p.playerModel.Leave()
 }
 
 // TableResponseChan provides the player's TableResponseChan
