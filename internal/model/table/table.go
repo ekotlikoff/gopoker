@@ -236,6 +236,7 @@ func (t *Table) SitDown(p *Player, seat int) error {
 			" is greater than max table size, " + fmt.Sprint(MaxTableSize))
 	} else if t.Players[seat] == nil {
 		t.Players[seat] = p
+		delete(t.Standers, p.Name)
 		p.table = t
 		p.Standing = false
 		p.SeatIndex = seat
@@ -258,6 +259,9 @@ func (t *Table) Leave(p *Player) error {
 
 // Leave a player at the next chance
 func (p *Player) Leave() error {
+	if p.GetTable() == nil {
+		return fmt.Errorf("cannot leave, %s is not at a table", p.Name)
+	}
 	return p.GetTable().Leave(p)
 }
 
@@ -286,13 +290,17 @@ func (t *Table) HandleStanders() []string {
 }
 
 // StandNow stands the player immediately
-func (p *Player) StandNow() {
+func (p *Player) StandNow() error {
+	if p.GetTable() == nil {
+		return fmt.Errorf("cannot leave, %s is not at a table", p.Name)
+	}
 	p.table.mutex.Lock()
 	defer p.table.mutex.Unlock()
 	p.Standing = true
 	p.WantToStandUp = false
 	p.table.Players[p.SeatIndex] = nil
 	p.table.Standers[p.Name] = p
+	return nil
 }
 
 // StandUp a player at the next chance
