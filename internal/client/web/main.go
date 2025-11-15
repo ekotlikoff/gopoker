@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"strconv"
+	"strings"
 	"syscall/js"
 
 	"github.com/chehsunliu/poker"
@@ -38,14 +39,15 @@ var (
 )
 
 type Client struct {
-	document js.Value
-	client   *http.Client
-	conn     js.Value // WebSocket connection
-	player   *model.Player
-	table    tableserver.SerializableTable
-	tables   []model.TableSummary
-	sitting  bool
-	bigBlind int
+	document  js.Value
+	client    *http.Client
+	conn      js.Value // WebSocket connection
+	player    *model.Player
+	table     tableserver.SerializableTable
+	tables    []model.TableSummary
+	sitting   bool
+	bigBlind  int
+	actionLog []string
 }
 
 func main() {
@@ -228,6 +230,17 @@ func (c *Client) connect(tableName string) {
 	}))
 }
 
+func (c *Client) logAction(message string) {
+	c.actionLog = append(c.actionLog, message)
+	// Garbage collect old messages.
+	if len(c.actionLog) > 50 {
+		c.actionLog = c.actionLog[len(c.actionLog)-50 : len(c.actionLog)]
+	}
+	actionLog := c.document.Call("getElementById", "action_log")
+	actionLog.Set("innerHTML", strings.Join(c.actionLog, "<br>"))
+	actionLog.Set("scrollTop", actionLog.Get("scrollHeight"))
+}
+
 func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 	message := args[0].Get("data").String()
 	var update gateway.ServerToPlayer
@@ -242,6 +255,7 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 			c.renderFullTable(update.PlayerUpdate.Table)
 			c.table = update.PlayerUpdate.Table
 		case tableserver.NewHandUpdateT:
+			c.logAction("New hand dealt.")
 			communityCardsDiv := c.document.Call("getElementById", "community_cards")
 			communityCardsDiv.Set("innerHTML", "")
 			c.renderDealer(update.PlayerUpdate.Dealer)
@@ -258,6 +272,18 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 		case tableserver.StateUpdateT:
 			c.handleStateUpdate(update.PlayerUpdate.StateUpdate)
 		case tableserver.RoundUpdateT:
+			action := update.PlayerUpdate.RoundAction
+			switch action.ActionType {
+			case model.Fold:
+				c.logAction(fmt.Sprintf("%s folds.", update.PlayerUpdate.CurrentBetter))
+			case model.Check:
+				c.logAction(fmt.Sprintf("%s checks.", update.PlayerUpdate.CurrentBetter))
+			case model.Call:
+				c.logAction(fmt.Sprintf("%s calls.", update.PlayerUpdate.CurrentBetter))
+			case model.Raise:
+				c.logAction(fmt.Sprintf("%s raises to %d.", update.PlayerUpdate.CurrentBetter, action.Bet))
+				c.document.Call("getElementById", "current_bet_amount").Set("value", action.Bet)
+			}
 			if update.PlayerUpdate.RoundAction.ActionType == model.Fold && update.PlayerUpdate.CurrentBetter == c.player.Name {
 				c.document.Call("getElementById", "player_hand").Set("innerHTML", "")
 			}
@@ -267,7 +293,14 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 		case tableserver.DealUpdateT:
 			c.renderCommunityCards(update.PlayerUpdate.Board)
 		case tableserver.HandOverUpdateT:
-			// TODO display winner somehow
+			for _, winner := range update.PlayerUpdate.Winners {
+				if winner.Player.Hole != nil {
+					c.logAction(fmt.Sprintf("%s wins %d chips with %s.", winner.Player.Name, winner.Winnings, poker.RankString(winner.Player.HandRank)))
+				} else {
+					// Player did not show their cards.
+					c.logAction(fmt.Sprintf("%s wins %d chips.", winner.Player.Name, winner.Winnings))
+				}
+			}
 		}
 	case gateway.TableActionResponseT:
 		if update.TableActionResponse.Err != nil {

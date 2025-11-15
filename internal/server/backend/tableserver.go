@@ -546,6 +546,18 @@ func (t *Table) SerializableTable(p *Player) SerializableTable {
 	}
 }
 
+func (t *Table) sanitizeAction(action model.RoundAction) model.RoundAction {
+	if action.ActionType == model.Raise {
+		if action.Bet == 0 {
+			action.ActionType = model.Check
+		} else if action.Bet == t.Hand().Round.CurrentBet {
+			action.ActionType = model.Call
+		}
+		return action
+	}
+	return action
+}
+
 // DealerIndex returns the table's dealer index
 func (t *Table) DealerIndex() int {
 	t.mutex.Lock()
@@ -853,6 +865,7 @@ func getPlayerAction(timeRemaining time.Duration, player *Player, t *Table) (mod
 			<-t.unpauseChan
 			t.updatePaused(false)
 		case action = <-player.requestChan:
+			action = t.sanitizeAction(action)
 			return action, elapsedTime + t.clock.now().Sub(n)
 		case <-afterChan:
 			log.Println(player.playerModel.Name, "timed out, folding")

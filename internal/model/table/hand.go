@@ -16,6 +16,8 @@ const (
 	Raise
 	// Call the current bet
 	Call
+	// Check the current bet
+	Check
 	// Fold your hand
 	Fold
 )
@@ -31,6 +33,8 @@ type (
 		Board []poker.Card
 		// Round is the current round of betting
 		Round *Round
+		// If the round of betting ended with a fold
+		RoundEndedWithFold bool
 		// Players in the hand
 		Players *ring.Ring
 		// Pot of winnings
@@ -254,6 +258,8 @@ func (hand *Hand) PlayerAction(
 	}
 	var err error
 	switch action.ActionType {
+	case Check:
+		err = hand.playerBet(player, action.Bet)
 	case Call:
 		err = hand.playerBet(player, hand.Round.CurrentBet)
 	case AllIn:
@@ -283,6 +289,7 @@ func (hand *Hand) checkForBettingCompletion() {
 		// If there is only 1 player left, the hand is done
 		hand.HandDone = true
 		hand.Round.RoundDone = true
+		hand.RoundEndedWithFold = true
 	} else if hand.BetterCount() <= 1 {
 		// If there is only 1 player left betting dealing must continue
 		hand.BettingDone = true
@@ -390,8 +397,17 @@ func (hand *Hand) FinishHand() ([]Winner, error) {
 	log.Println("Distributing pots")
 	playerRanking := hand.getPlayerRanking()
 	winners := hand.distributePots(playerRanking)
+	// If the hand ended with a fold, the player does not show their cards by default.
+	// TODO give player the option to always show their cards.
+	if hand.RoundEndedWithFold {
+		for i := range winners {
+			winners[i].Player.Hole = nil
+			winners[i].Player.HandRank = 0
+		}
+	}
 	// Clear board
 	hand.Board = []poker.Card{}
+	hand.RoundEndedWithFold = false
 	return winners, nil
 }
 
