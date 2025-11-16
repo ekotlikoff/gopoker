@@ -182,11 +182,13 @@ func TestSimpleHand(t *testing.T) {
 		t.Errorf("dealer should be '%v', got '%v'", p2.playerModel.Name, table.dealer())
 	}
 	checkForUpdate(t, p2, BetUpdateT)
+	checkForUpdate(t, p1, BetUpdateT)
 	sendRoundActionWithTimeout(t, p2, model.RoundAction{ActionType: model.Call})
 	checkRoundResponse(t, p2, false)
 	checkForUpdate(t, p1, RoundUpdateT)
 	checkForUpdate(t, p2, RoundUpdateT)
 	checkForUpdate(t, p1, BetUpdateT)
+	checkForUpdate(t, p2, BetUpdateT)
 	sendRoundActionWithTimeout(t, p1, model.RoundAction{ActionType: model.Call})
 	checkRoundResponse(t, p1, false)
 	checkForUpdate(t, p2, RoundUpdateT)
@@ -197,6 +199,7 @@ func TestSimpleHand(t *testing.T) {
 	checkForUpdate(t, p1, DealUpdateT)
 	checkForUpdate(t, p2, DealUpdateT)
 	checkForUpdate(t, p1, BetUpdateT)
+	checkForUpdate(t, p2, BetUpdateT)
 	if len(table.table.Board()) != 3 {
 		t.Errorf("expected the flop, len(table.table.Board())==%d", len(table.table.Board()))
 	}
@@ -216,6 +219,7 @@ func TestSimpleHand(t *testing.T) {
 	checkForUpdate(t, p1, RoundUpdateT)
 	checkForUpdate(t, p2, RoundUpdateT)
 	checkForUpdate(t, p2, BetUpdateT)
+	checkForUpdate(t, p1, BetUpdateT)
 	// // TODO add timeouts for the server's SendRoundResponse
 	sendRoundActionWithTimeout(t, p2, model.RoundAction{ActionType: model.Call})
 	checkRoundResponse(t, p2, false)
@@ -224,6 +228,7 @@ func TestSimpleHand(t *testing.T) {
 	checkForUpdate(t, p1, DealUpdateT)
 	checkForUpdate(t, p2, DealUpdateT)
 	checkForUpdate(t, p1, BetUpdateT)
+	checkForUpdate(t, p2, BetUpdateT)
 	if len(table.table.Board()) != 4 {
 		t.Errorf("len(table.table.Board())==%d, want 4", len(table.table.Board()))
 	}
@@ -234,6 +239,7 @@ func TestSimpleHand(t *testing.T) {
 	checkForUpdate(t, p1, RoundUpdateT)
 	checkForUpdate(t, p2, RoundUpdateT)
 	checkForUpdate(t, p2, BetUpdateT)
+	checkForUpdate(t, p1, BetUpdateT)
 	sendRoundActionWithTimeout(t, p2, model.RoundAction{ActionType: model.Call})
 	checkRoundResponse(t, p2, false)
 	checkForUpdate(t, p1, RoundUpdateT)
@@ -241,6 +247,7 @@ func TestSimpleHand(t *testing.T) {
 	checkForUpdate(t, p1, DealUpdateT)
 	checkForUpdate(t, p2, DealUpdateT)
 	checkForUpdate(t, p1, BetUpdateT)
+	checkForUpdate(t, p2, BetUpdateT)
 	if len(table.table.Board()) != 5 {
 		t.Errorf("len(table.table.Board())==%d, want 5", len(table.table.Board()))
 	}
@@ -251,6 +258,7 @@ func TestSimpleHand(t *testing.T) {
 	checkForUpdate(t, p1, RoundUpdateT)
 	checkForUpdate(t, p2, RoundUpdateT)
 	checkForUpdate(t, p2, BetUpdateT)
+	checkForUpdate(t, p1, BetUpdateT)
 	sendRoundActionWithTimeout(t, p2, model.RoundAction{ActionType: model.Call})
 	if !p1.playerModel.WantToStandUp {
 		t.Error("p1 should want to stand up")
@@ -291,11 +299,13 @@ func TestTimeoutMidBet(t *testing.T) {
 		t.Error("table should be playing")
 	}
 	checkForUpdate(t, p2, BetUpdateT)
+	checkForUpdate(t, p1, BetUpdateT)
 	sendRoundActionWithTimeout(t, p2, model.RoundAction{ActionType: model.Call})
 	checkRoundResponse(t, p2, false)
 	checkForUpdate(t, p1, RoundUpdateT)
 	checkForUpdate(t, p2, RoundUpdateT)
 	checkForUpdate(t, p1, BetUpdateT)
+	checkForUpdate(t, p2, BetUpdateT)
 	ts.clock.sleep(time.Hour)
 	checkForUpdate(t, p2, RoundUpdateT)
 	u := checkForUpdate(t, p1, RoundUpdateT)
@@ -323,6 +333,7 @@ func TestPauseMidBet(t *testing.T) {
 		t.Error("table should be playing")
 	}
 	checkForUpdate(t, p2, BetUpdateT)
+	checkForUpdate(t, p1, BetUpdateT)
 	sendRoundActionWithTimeout(t, p2, model.RoundAction{ActionType: model.Call})
 	if r := p2.GetRoundResponse(); r.Err != nil {
 		t.Errorf("expected a successful bet, got error: %s", r.Err)
@@ -330,6 +341,7 @@ func TestPauseMidBet(t *testing.T) {
 	checkForUpdate(t, p1, RoundUpdateT)
 	checkForUpdate(t, p2, RoundUpdateT)
 	checkForUpdate(t, p1, BetUpdateT)
+	checkForUpdate(t, p2, BetUpdateT)
 	ts.SendTableAction(PauseTableAction(tableName, p1))
 	checkForUpdate(t, p1, TableUpdateT)
 	checkForUpdate(t, p2, TableUpdateT)
@@ -344,6 +356,7 @@ func TestPauseMidBet(t *testing.T) {
 		t.Error("expected to pause table successfully")
 	}
 	checkForUpdate(t, p1, BetUpdateT)
+	checkForUpdate(t, p2, BetUpdateT)
 	sendRoundActionWithTimeout(t, p1, model.RoundAction{ActionType: model.Call})
 	if r := p1.GetRoundResponse(); r.Err != nil {
 		t.Errorf("expected a successful bet, got error: %s", r.Err)
