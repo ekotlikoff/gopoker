@@ -96,6 +96,12 @@ type (
 		RoundAction model.RoundAction
 		// CurrentBetter is the player that made the round action.
 		CurrentBetter string
+		// CurrentSeat is the relevant seat.
+		CurrentSeat int
+		// TimeRemaining to bet
+		TimeRemaining time.Duration
+		// TimeElapsed in bet
+		TimeElapsed time.Duration
 		// CurrentBets is the current bets from each player.
 		CurrentBets []int
 		// CurrentFunds is the current funds for each player.
@@ -824,9 +830,13 @@ func newTableUpdate(a TableAction) *PlayerUpdate {
 	}
 }
 
-func newBetUpdate() *PlayerUpdate {
+func newBetUpdate(p *Player, timeRemaining time.Duration, timeElapsed time.Duration) *PlayerUpdate {
 	return &PlayerUpdate{
-		Type: BetUpdateT,
+		Type:          BetUpdateT,
+		CurrentBetter: p.GetName(),
+		CurrentSeat:   p.GetSeat(),
+		TimeRemaining: timeRemaining,
+		TimeElapsed:   timeElapsed,
 	}
 }
 
@@ -835,6 +845,7 @@ func (t *Table) newRoundUpdate(a model.RoundAction, p *model.Player) *PlayerUpda
 		Type:          RoundUpdateT,
 		RoundAction:   a,
 		CurrentBetter: p.Name,
+		CurrentSeat:   p.SeatIndex,
 		CurrentBets:   t.currentBets(),
 		CurrentFunds:  t.currentFunds(),
 		Pot:           t.Hand().Pot.MainPot.Pot,
@@ -846,11 +857,12 @@ func (t *Table) listenForPlayerActions() {
 		success := false
 		player := t.table.CurrentBetter()
 		timeRemaining := t.getTimeToBet()
+		var elapsedTime time.Duration
 		for !success {
 			client := t.players[player.Name]
-			a, elapsedTime := getPlayerAction(timeRemaining, client, t)
+			a, elapsed := getPlayerAction(timeRemaining, elapsedTime, client, t)
 			err := t.table.HandlePlayerAction(player, a)
-			timeRemaining -= elapsedTime
+			elapsedTime = elapsed
 			if err == nil {
 				t.sendPlayerUpdates(t.newRoundUpdate(a, player))
 				success = true
@@ -892,15 +904,14 @@ func (p *Player) sendPlayerUpdate(u *PlayerUpdate, wg *sync.WaitGroup) {
 }
 
 // Returns the selected player action and the elapsed time (not counting any pause)
-func getPlayerAction(timeRemaining time.Duration, player *Player, t *Table) (model.RoundAction, time.Duration) {
+func getPlayerAction(timeRemaining, elapsedTime time.Duration, player *Player, t *Table) (model.RoundAction, time.Duration) {
 	log.Println("Waiting for action from", player.playerModel.Name)
 	action := model.RoundAction{ActionType: model.Fold}
 	n := t.clock.now()
-	var elapsedTime time.Duration
 	for {
 		var wg sync.WaitGroup
 		afterChan := t.clock.after(timeRemaining - elapsedTime)
-		player.sendPlayerUpdate(newBetUpdate(), &wg)
+		t.sendPlayerUpdates(newBetUpdate(player, timeRemaining, elapsedTime))
 		wg.Wait()
 		select {
 		case <-t.pauseChan:
@@ -908,6 +919,7 @@ func getPlayerAction(timeRemaining time.Duration, player *Player, t *Table) (mod
 			t.updatePaused(true)
 			<-t.unpauseChan
 			t.updatePaused(false)
+			n = t.clock.now()
 		case action = <-player.requestChan:
 			action = t.sanitizeAction(action)
 			return action, elapsedTime + t.clock.now().Sub(n)

@@ -11,7 +11,9 @@ import (
 	"net/http/cookiejar"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall/js"
+	"time"
 
 	"github.com/chehsunliu/poker"
 
@@ -57,6 +59,11 @@ type Client struct {
 	unpauseGameButton js.Value
 	betButton         js.Value
 	foldButton        js.Value
+	betTimer          js.Value
+	betTimeRemaining  time.Duration
+	betTimeElapsed    time.Duration
+	betTimeLastUpdate time.Time
+	mutex             sync.Mutex
 }
 
 func main() {
@@ -268,6 +275,47 @@ func (c *Client) logAction(message string) {
 	actionLog.Set("scrollTop", actionLog.Get("scrollHeight"))
 }
 
+func (c *Client) startBetTimer(seat int) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if !c.betTimer.IsUndefined() {
+		js.Global().Call("clearInterval", c.betTimer)
+	}
+	timerBar := c.document.Call("getElementById", fmt.Sprintf("seat_%d", seat)).Call("querySelector", ".timer-bar")
+	timerBar.Get("classList").Call("remove", "hidden")
+	c.betTimer = js.Global().Call("setInterval", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		now := time.Now()
+		c.betTimeElapsed += now.Sub(c.betTimeLastUpdate)
+		c.betTimeLastUpdate = now
+		timerBarWidth := 100 * float64(c.betTimeRemaining-c.betTimeElapsed) / float64(c.betTimeRemaining)
+		timerBar.Get("style").Set("width", fmt.Sprintf("%f%%", timerBarWidth))
+		if timerBarWidth <= 0 {
+			js.Global().Call("clearInterval", c.betTimer)
+		}
+		return nil
+	}), 1000)
+}
+
+func (c *Client) clearBetTimerLoop() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if !c.betTimer.IsUndefined() {
+		js.Global().Call("clearInterval", c.betTimer)
+	}
+}
+
+func (c *Client) stopBetTimer(seat int) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if !c.betTimer.IsUndefined() {
+		js.Global().Call("clearInterval", c.betTimer)
+	}
+	c.betTimeElapsed = 0
+	timerBar := c.document.Call("getElementById", fmt.Sprintf("seat_%d", seat)).Call("querySelector", ".timer-bar")
+	timerBar.Get("style").Set("width", "100.0%")
+	timerBar.Get("classList").Call("add", "hidden")
+}
+
 func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 	message := args[0].Get("data").String()
 	var update gateway.ServerToPlayer
@@ -293,12 +341,19 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 			c.renderPot(update.PlayerUpdate.Pot)
 			c.renderFunds(update.PlayerUpdate.CurrentFunds)
 		case tableserver.BetUpdateT:
-			c.document.Call("getElementById", "player_controls").Get("classList").Call("remove", "hidden")
+			c.betTimeRemaining = update.PlayerUpdate.TimeRemaining
+			c.betTimeElapsed = update.PlayerUpdate.TimeElapsed
+			c.betTimeLastUpdate = time.Now()
+			c.startBetTimer(update.PlayerUpdate.CurrentSeat)
+			if update.PlayerUpdate.CurrentBetter == c.player.Name {
+				c.document.Call("getElementById", "player_controls").Get("classList").Call("remove", "hidden")
+			}
 		case tableserver.TableUpdateT:
 			c.handleTableUpdate(update.PlayerUpdate.TableAction)
 		case tableserver.StateUpdateT:
 			c.handleStateUpdate(update.PlayerUpdate.StateUpdate)
 		case tableserver.RoundUpdateT:
+			c.stopBetTimer(update.PlayerUpdate.CurrentSeat)
 			action := update.PlayerUpdate.RoundAction
 			switch action.ActionType {
 			case model.Fold:
@@ -358,22 +413,14 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 		case tableserver.Create:
 			// TODO
 		case tableserver.Unpause:
-			// TODO remove UI showing pause
-			if c.player.Name == c.table.AdminName {
-				c.pauseGameButton.Get("classList").Call("remove", "hidden")
-				c.unpauseGameButton.Get("classList").Call("add", "hidden")
-			}
+			c.pauseGameButton.Get("classList").Call("remove", "hidden")
+			c.unpauseGameButton.Get("classList").Call("add", "hidden")
 		case tableserver.Pause:
-			// TODO add UI showing pause
-			if c.player.Name == c.table.AdminName {
-				c.pauseGameButton.Get("classList").Call("add", "hidden")
-				c.unpauseGameButton.Get("classList").Call("remove", "hidden")
-			}
+			c.pauseGameButton.Get("classList").Call("add", "hidden")
+			c.unpauseGameButton.Get("classList").Call("remove", "hidden")
 		case tableserver.Start:
-			if c.player.Name == c.table.AdminName {
-				c.pauseGameButton.Get("classList").Call("remove", "hidden")
-				c.startGameButton.Get("classList").Call("add", "hidden")
-			}
+			c.pauseGameButton.Get("classList").Call("remove", "hidden")
+			c.startGameButton.Get("classList").Call("add", "hidden")
 		}
 	case gateway.RoundActionResponseT:
 		if update.RoundActionResponse.Err == nil {
@@ -444,6 +491,11 @@ func (c *Client) handleTableUpdate(action tableserver.TableAction) {
 			}
 		}
 		c.removePlayer(action.Seat, !c.sitting)
+	case tableserver.Pause:
+		// TODO add UI showing pause
+		c.clearBetTimerLoop()
+	case tableserver.Unpause:
+		// TODO remove UI showing pause
 	}
 }
 
