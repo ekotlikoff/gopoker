@@ -876,11 +876,15 @@ func (t *Table) sendPlayerUpdates(u *PlayerUpdate) {
 }
 
 func (p *Player) sendPlayerUpdate(u *PlayerUpdate, wg *sync.WaitGroup) {
+	if p.table == nil {
+		return
+	}
 	wg.Add(1)
+	clock := p.table.clock
 	go func(p *Player) {
 		select {
 		case p.TableUpdateChan <- u:
-		case <-p.table.clock.after(500 * time.Millisecond):
+		case <-clock.after(500 * time.Millisecond):
 			log.Printf("time out sending to %s's tableUpdateChan", p.playerModel.Name)
 		}
 		wg.Done()
