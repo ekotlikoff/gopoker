@@ -479,6 +479,10 @@ func (c *Client) renderFullTable(table tableserver.SerializableTable) {
 		seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
 		playerName := seat.Call("querySelector", ".player_name")
 		sitButton := seat.Call("querySelector", ".sit_down_button")
+		sitButton.Set("onclick", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+			c.sit(seatIndex)
+			return nil
+		}))
 
 		if player != nil {
 			playerName.Set("textContent", player.Name)
@@ -495,10 +499,6 @@ func (c *Client) renderFullTable(table tableserver.SerializableTable) {
 		} else {
 			playerName.Set("textContent", "")
 			sitButton.Get("classList").Call("remove", "hidden")
-			sitButton.Set("onclick", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-				c.sit(seatIndex)
-				return nil
-			}))
 		}
 	}
 
