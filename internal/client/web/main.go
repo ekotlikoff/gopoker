@@ -338,6 +338,10 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 		switch update.TableActionResponse.TableAction.TableActionType {
 		case tableserver.Sit:
 			c.sitting = true
+			c.player.SeatIndex = update.TableActionResponse.TableAction.Seat
+			seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", c.player.SeatIndex))
+			playerName := seat.Call("querySelector", ".player_name")
+			playerName.Get("classList").Call("add", "current-player")
 			c.standButton.Get("classList").Call("remove", "hidden")
 			c.leaveTableButton.Get("classList").Call("add", "hidden")
 			for i := 0; i < model.MaxTableSize; i++ {
@@ -422,6 +426,9 @@ func (c *Client) handleTableUpdate(action tableserver.TableAction) {
 	case tableserver.Stand:
 		// TODO hide the standing... UI
 		if action.PlayerName == c.player.Name {
+			seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", c.player.SeatIndex))
+			playerName := seat.Call("querySelector", ".player_name")
+			playerName.Get("classList").Call("remove", "current-player")
 			c.leaveTableButton.Get("classList").Call("remove", "hidden")
 			c.sitting = false
 			c.standButton.Get("classList").Call("add", "hidden")
