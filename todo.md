@@ -2,7 +2,7 @@
 
 #### Must have
 1. Admin able to change chip counts during pause
-1. Make pot prettier (maybe 5 thresholds, above which there are 5 different visualizations of chip stacks)
+1. Show player chips
 1. Visualize winner after a hand with chip sliding animation
 1. Show winner's cards (if applicable, not if they win on a fold)
 1. Show cards on all-in
@@ -14,6 +14,7 @@
 1. Add ability to configure table when creating
 
 ## Done
+1. Make pot prettier
 1. Visualize remaining time to bet
 1. Make it clear which player you are
 1. Add table pause functionality
