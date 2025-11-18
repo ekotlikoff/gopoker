@@ -383,6 +383,7 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 					// Player did not show their cards.
 					c.logAction(fmt.Sprintf("%s wins %d chips.", winner.Player.Name, winner.Winnings))
 				}
+				c.animateChipsToWinner(winner.Player.SeatIndex)
 			}
 		}
 	case gateway.TableActionResponseT:
@@ -718,6 +719,19 @@ func (c *Client) renderPotChips(pot int) {
 	if chipsAdded%maxChipHeight > 0 {
 		potChips.Call("appendChild", stackDiv)
 		stackDiv = c.document.Call("createElement", "div")
+	}
+}
+
+func (c *Client) animateChipsToWinner(winnerSeat int) {
+	potChips := c.document.Call("getElementById", "pot_chips")
+	winnerSeatEl := c.document.Call("getElementById", fmt.Sprintf("seat_%d", winnerSeat))
+	winnerRect := winnerSeatEl.Call("getBoundingClientRect")
+	potRect := potChips.Call("getBoundingClientRect")
+	chipStacks := potChips.Get("children")
+	for i := 0; i < chipStacks.Length(); i++ {
+		stack := chipStacks.Index(i)
+		stack.Get("style").Set("transition", "all 1s ease-in-out")
+		stack.Get("style").Set("transform", fmt.Sprintf("translate(%dpx, %dpx)", winnerRect.Get("left").Int()-potRect.Get("left").Int(), winnerRect.Get("top").Int()-potRect.Get("top").Int()))
 	}
 }
 
