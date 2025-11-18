@@ -7,6 +7,7 @@
 1. Show winner's cards (if applicable, not if they win on a fold)
 1. Show cards on all-in
 1. All in is buggy, fix
+1. Visualize multiple pots during all in side pot situations
 
 #### Nice to have
 1. Support custom player avatars w/ nano banana or similar
