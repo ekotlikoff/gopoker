@@ -485,7 +485,7 @@ func (c *Client) renderBetChips(bet int, betDiv js.Value) {
 			chip.Get("style").Set("position", "absolute")
 			chip.Get("style").Set("bottom", fmt.Sprintf("%dpx", chipRow*7+(chipsAdded%maxChipHeight)*2))
 			chip.Get("style").Set("left", fmt.Sprintf("%dpx", chipColumn*7))
-			chip.Get("style").Set("z-index", (chipRow*-maxChipHeight)+(chipsAdded/maxChipHeight))
+			chip.Get("style").Set("z-index", 100+(chipRow*-maxChipHeight)+(chipsAdded/maxChipHeight))
 			chipsAdded++
 			stackDiv.Call("appendChild", chip)
 			if chipsAdded%maxChipHeight == 0 {
@@ -509,8 +509,10 @@ func (c *Client) renderBetChips(bet int, betDiv js.Value) {
 	}
 	if originalBet != 0 {
 		betAmount := c.document.Call("createElement", "div")
-		betAmount.Set("textContent", fmt.Sprintf("Bet: %d", originalBet))
+		betAmount.Set("textContent", fmt.Sprintf("$%d", originalBet))
+		betAmount.Get("style").Set("bottom", "-5px")
 		betAmount.Get("style").Set("font-size", "0.7rem")
+		betAmount.Get("style").Set("position", "absolute")
 		betDiv.Call("appendChild", betAmount)
 	} else {
 		betDiv.Set("textContent", "")
@@ -600,7 +602,7 @@ func (c *Client) renderFullTable(table tableserver.SerializableTable) {
 			}
 			chipsDiv := seat.Call("querySelector", ".player_funds")
 			if player.Funds > 0 {
-				chipsDiv.Set("textContent", fmt.Sprintf("Chips: %d", player.Funds))
+				chipsDiv.Set("textContent", fmt.Sprintf("$%d", player.Funds))
 			} else {
 				chipsDiv.Set("textContent", "")
 			}
@@ -751,7 +753,7 @@ func (c *Client) renderPotChips(pot int) {
 			chip.Get("style").Set("position", "absolute")
 			chip.Get("style").Set("bottom", fmt.Sprintf("%dpx", chipRow*7+(chipsAdded%maxChipHeight)*2))
 			chip.Get("style").Set("left", fmt.Sprintf("%dpx", chipColumn*7))
-			chip.Get("style").Set("z-index", (chipRow*-maxChipHeight)+(chipsAdded/maxChipHeight))
+			chip.Get("style").Set("z-index", 100+(chipRow*-maxChipHeight)+(chipsAdded/maxChipHeight))
 			chipsAdded++
 			stackDiv.Call("appendChild", chip)
 			if chipsAdded%maxChipHeight == 0 {
@@ -815,7 +817,7 @@ func (c *Client) renderFunds(funds []int) {
 		seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
 		fundsDiv := seat.Call("querySelector", ".player_funds")
 		if f > 0 {
-			fundsDiv.Set("textContent", fmt.Sprintf("Chips: %d", f))
+			fundsDiv.Set("textContent", fmt.Sprintf("$%d", f))
 		} else {
 			fundsDiv.Set("textContent", "")
 		}
