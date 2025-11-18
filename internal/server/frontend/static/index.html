@@ -162,9 +162,21 @@
         }
 
         .player-bet {
-            font-size: 12px;
-            color: white;
+            position: absolute;
+            width: 50px;
+            height: 50px;
         }
+
+        #player_bet_0 { top: 50%; left: 15%; transform: translateY(-50%); }
+        #player_bet_1 { top: 25%; left: 25%; }
+        #player_bet_2 { top: 15%; left: 45%; transform: translateX(-50%); }
+        #player_bet_3 { top: 15%; right: 45%; transform: translateX(50%); }
+        #player_bet_4 { top: 25%; right: 25%; }
+        #player_bet_5 { top: 50%; right: 15%; transform: translateY(-50%); }
+        #player_bet_6 { bottom: 25%; right: 25%; }
+        #player_bet_7 { bottom: 15%; right: 45%; transform: translateX(50%); }
+        #player_bet_8 { bottom: 15%; left: 45%; transform: translateX(-50%); }
+        #player_bet_9 { bottom: 25%; left: 25%; }
 
         .current-player {
             border: 2px solid #f0ad4e;
@@ -415,45 +427,46 @@
 
             <!-- 8 Seats -->
             <div id="seat_0" class="seat"><div class="dealer-chip hidden">D</div><span class="player_name"></span>
-                <div class="player_bet"></div>
                 <div class="player_funds"></div><div class="timer-bar hidden"></div><button class="sit_down_button">Sit</button>
             </div>
             <div id="seat_1" class="seat"><div class="dealer-chip hidden">D</div><span class="player_name"></span>
-                <div class="player_bet"></div>
                 <div class="player_funds"></div><div class="timer-bar hidden"></div><button class="sit_down_button">Sit</button>
             </div>
             <div id="seat_2" class="seat"><div class="dealer-chip hidden">D</div><span class="player_name"></span>
-                <div class="player_bet"></div>
                 <div class="player_funds"></div><div class="timer-bar hidden"></div><button class="sit_down_button">Sit</button>
             </div>
             <div id="seat_3" class="seat"><div class="dealer-chip hidden">D</div><span class="player_name"></span>
-                <div class="player_bet"></div>
                 <div class="player_funds"></div><div class="timer-bar hidden"></div><button class="sit_down_button">Sit</button>
             </div>
             <div id="seat_4" class="seat"><div class="dealer-chip hidden">D</div><span class="player_name"></span>
-                <div class="player_bet"></div>
                 <div class="player_funds"></div><div class="timer-bar hidden"></div><button class="sit_down_button">Sit</button>
             </div>
             <div id="seat_5" class="seat"><div class="dealer-chip hidden">D</div><span class="player_name"></span>
-                <div class="player_bet"></div>
                 <div class="player_funds"></div><div class="timer-bar hidden"></div><button class="sit_down_button">Sit</button>
             </div>
             <div id="seat_6" class="seat"><div class="dealer-chip hidden">D</div><span class="player_name"></span>
-                <div class="player_bet"></div>
                 <div class="player_funds"></div><div class="timer-bar hidden"></div><button class="sit_down_button">Sit</button>
             </div>
             <div id="seat_7" class="seat"><div class="dealer-chip hidden">D</div><span class="player_name"></span>
-                <div class="player_bet"></div>
                 <div class="player_funds"></div><div class="timer-bar hidden"></div><button class="sit_down_button">Sit</button>
             </div>
             <div id="seat_8" class="seat"><div class="dealer-chip hidden">D</div><span class="player_name"></span>
-                <div class="player_bet"></div>
                 <div class="player_funds"></div><div class="timer-bar hidden"></div><button class="sit_down_button">Sit</button>
             </div>
             <div id="seat_9" class="seat"><div class="dealer-chip hidden">D</div><span class="player_name"></span>
-                <div class="player_bet"></div>
                 <div class="player_funds"></div><div class="timer-bar hidden"></div><button class="sit_down_button">Sit</button>
             </div>
+
+            <div id="player_bet_0" class="player-bet"></div>
+            <div id="player_bet_1" class="player-bet"></div>
+            <div id="player_bet_2" class="player-bet"></div>
+            <div id="player_bet_3" class="player-bet"></div>
+            <div id="player_bet_4" class="player-bet"></div>
+            <div id="player_bet_5" class="player-bet"></div>
+            <div id="player_bet_6" class="player-bet"></div>
+            <div id="player_bet_7" class="player-bet"></div>
+            <div id="player_bet_8" class="player-bet"></div>
+            <div id="player_bet_9" class="player-bet"></div>
         </div>
 
         <div id="player_hand">

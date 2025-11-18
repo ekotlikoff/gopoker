@@ -457,8 +457,7 @@ func (c *Client) removeDealerChip() {
 
 func (c *Client) renderBets(currentBets []int) {
 	for i, bet := range currentBets {
-		seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
-		betDiv := seat.Call("querySelector", ".player_bet")
+		betDiv := c.document.Call("getElementById", fmt.Sprintf("player_bet_%d", i))
 		betDiv.Set("innerHTML", "")
 		if bet > 0 {
 			c.renderBetChips(bet, betDiv)
@@ -467,11 +466,7 @@ func (c *Client) renderBets(currentBets []int) {
 }
 
 func (c *Client) renderBetChips(bet int, betDiv js.Value) {
-	if bet != 0 {
-		betDiv.Set("textContent", fmt.Sprintf("Bet: %d", bet))
-	} else {
-		betDiv.Set("textContent", "")
-	}
+	originalBet := bet
 	chipValues := []int{10000, 1000, 500, 100, 25, 5, 1}
 	chipColors := []string{"brown", "yellow", "blue", "black", "green", "red", "white"}
 	chipsAdded := 0
@@ -511,6 +506,14 @@ func (c *Client) renderBetChips(bet int, betDiv js.Value) {
 	}
 	if chipsAdded%maxChipHeight > 0 {
 		betDiv.Call("appendChild", stackDiv)
+	}
+	if originalBet != 0 {
+		betAmount := c.document.Call("createElement", "div")
+		betAmount.Set("textContent", fmt.Sprintf("Bet: %d", originalBet))
+		betAmount.Get("style").Set("font-size", "0.7rem")
+		betDiv.Call("appendChild", betAmount)
+	} else {
+		betDiv.Set("textContent", "")
 	}
 }
 
@@ -568,8 +571,9 @@ func (c *Client) handleStateUpdate(stateUpdate tableserver.StateUpdate) {
 func (c *Client) removePlayer(s int, showButton bool) {
 	seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", s))
 	seat.Call("querySelector", ".player_name").Set("textContent", "")
-	seat.Call("querySelector", ".player_bet").Set("textContent", "")
 	seat.Call("querySelector", ".player_funds").Set("textContent", "")
+	playerBet := c.document.Call("getElementById", fmt.Sprintf("player_bet_%d", s))
+	playerBet.Set("textContent", "")
 	sitButton := seat.Call("querySelector", ".sit_down_button")
 	if showButton {
 		sitButton.Get("classList").Call("remove", "hidden")
