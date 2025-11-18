@@ -9,11 +9,11 @@
 
 #### Nice to have
 1. Support custom player avatars w/ nano banana or similar
-1. Make chip count prettier
 1. Add check/call/raise/fold animations
 1. Add ability to configure table when creating
 
 ## Done
+1. Log when invalid move is made
 1. Make pot prettier
 1. Visualize remaining time to bet
 1. Make it clear which player you are

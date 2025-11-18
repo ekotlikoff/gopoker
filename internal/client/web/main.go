@@ -320,6 +320,7 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 	message := args[0].Get("data").String()
 	var update gateway.ServerToPlayer
 	if err := json.Unmarshal([]byte(message), &update); err != nil {
+		log.Println("Error unmarshaling", err)
 		return nil
 	}
 
@@ -385,7 +386,7 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 			}
 		}
 	case gateway.TableActionResponseT:
-		if update.TableActionResponse.Err != nil {
+		if update.TableActionResponse.Err != "" {
 			log.Println("error", update.TableActionResponse.TableAction.TableActionType)
 			// TODO: display error to user
 			return nil
@@ -423,7 +424,9 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 			c.startGameButton.Get("classList").Call("add", "hidden")
 		}
 	case gateway.RoundActionResponseT:
-		if update.RoundActionResponse.Err == nil {
+		if update.RoundActionResponse.Err != "" {
+			c.logAction(fmt.Sprintf("Invalid bet: %s", update.RoundActionResponse.Err))
+		} else {
 			c.document.Call("getElementById", "player_controls").Get("classList").Call("add", "hidden")
 		}
 	}
@@ -699,11 +702,9 @@ func (c *Client) renderPotChips(pot int) {
 		}
 		if value > 25 {
 			// Large value chips get their own stack
-			log.Println("chips before", chipsAdded)
 			if chipsAdded%maxChipHeight > 0 {
 				chipsAdded += (maxChipHeight - (chipsAdded % maxChipHeight))
 			}
-			log.Println("chips after", chipsAdded)
 		}
 	}
 }

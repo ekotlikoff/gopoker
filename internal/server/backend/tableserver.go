@@ -180,13 +180,13 @@ type (
 
 	// TableActionResponse is a resposne to a client's TableAction.
 	TableActionResponse struct {
-		Err         error
+		Err         string
 		TableAction TableAction
 	}
 
 	// RoundActionResponse is a resposne to a client's RoundAction.
 	RoundActionResponse struct {
-		Err error
+		Err string
 	}
 )
 
@@ -374,7 +374,7 @@ func (ts *TableServer) Serve() {
 			var table *Table
 			if table = ts.tables[a.TableName]; table == nil {
 				p.tableResponseChan <- TableActionResponse{
-					fmt.Errorf("no table %q", a.TableName),
+					fmt.Errorf("no table %q", a.TableName).Error(),
 					a,
 				}
 				continue
@@ -429,7 +429,7 @@ func (ts *TableServer) Serve() {
 				Type: FullUpdateT,
 			}
 		}
-		a.player.tableResponseChan <- TableActionResponse{err, a}
+		a.player.tableResponseChan <- TableActionResponse{errorToString(err), a}
 	}
 }
 
@@ -852,6 +852,13 @@ func (t *Table) newRoundUpdate(a model.RoundAction, p *model.Player) *PlayerUpda
 	}
 }
 
+func errorToString(e error) string {
+	if e == nil {
+		return ""
+	}
+	return e.Error()
+}
+
 func (t *Table) listenForPlayerActions() {
 	for !t.table.RoundDone() && !t.table.BettingDone() && !t.table.HandDone() {
 		success := false
@@ -869,7 +876,7 @@ func (t *Table) listenForPlayerActions() {
 			} else {
 				log.Println(err)
 			}
-			client.responseChan <- RoundActionResponse{err}
+			client.responseChan <- RoundActionResponse{errorToString(err)}
 		}
 		log.Println(player.Name, "made their bet")
 	}

@@ -296,16 +296,17 @@ func (gw *Gateway) createTable(w http.ResponseWriter, r *http.Request) {
 	action := tableserver.CreateTableAction(req.Name, player)
 	gw.TableServer.SendTableAction(action)
 	resp := player.GetTableResponse()
-	if resp.Err != nil {
+	if resp.Err != "" {
+		log.Println(resp.Err)
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(resp.Err.Error()))
+		w.Write([]byte(resp.Err))
 		return
 	}
 	gw.TableServer.SendTableAction(tableserver.JoinTableAction(req.Name, player))
 	resp = player.GetTableResponse()
-	if resp.Err != nil {
+	if resp.Err != "" {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(resp.Err.Error()))
+		w.Write([]byte(resp.Err))
 		return
 	}
 
@@ -416,9 +417,9 @@ func (gw *Gateway) Websocket(w http.ResponseWriter, r *http.Request) {
 		// If player hasn't already joined the table, do so now.
 		gw.TableServer.SendTableAction(tableserver.JoinTableAction(table, player))
 		resp := player.GetTableResponse()
-		if resp.Err != nil {
+		if resp.Err != "" {
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(resp.Err.Error()))
+			w.Write([]byte(resp.Err))
 			return
 		}
 	}
@@ -461,6 +462,7 @@ func writeLoop(c *websocket.Conn, player *tableserver.Player) {
 			update.Type = PlayerUpdateT
 			update.PlayerUpdate = u
 		case u := <-player.RoundResponseChan():
+			log.Println(u)
 			update.Type = RoundActionResponseT
 			update.RoundActionResponse = u
 		case u := <-player.TableResponseChan():

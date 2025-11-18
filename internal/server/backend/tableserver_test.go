@@ -45,7 +45,7 @@ func TestCreateAndJoin(t *testing.T) {
 	p1 := NewPlayer("1")
 	p2 := NewPlayer("2")
 	ts.SendTableAction(CreateTableAction(tableName, p1))
-	if p1.GetTableResponse().Err != nil {
+	if p1.GetTableResponse().Err != "" {
 		t.Error("expected to create table successfully")
 	}
 	if _, ok := ts.tables[tableName]; !ok {
@@ -55,14 +55,14 @@ func TestCreateAndJoin(t *testing.T) {
 		t.Error("expected creator to be admin")
 	}
 	ts.SendTableAction(JoinTableAction(tableName, p1))
-	if p1.GetTableResponse().Err != nil {
+	if p1.GetTableResponse().Err != "" {
 		t.Error("expected to join table successfully")
 	}
 	if p1.table != ts.tables[tableName] {
 		t.Error("p1's table is not set after joining")
 	}
 	ts.SendTableAction(JoinTableAction(tableName, p2))
-	if p2.GetTableResponse().Err != nil {
+	if p2.GetTableResponse().Err != "" {
 		t.Error("expected to join table successfully")
 	}
 	if p2.table != ts.tables[tableName] {
@@ -80,15 +80,15 @@ func TestJoinFakeTable(t *testing.T) {
 	p1 := NewPlayer("1")
 	p2 := NewPlayer("2")
 	ts.SendTableAction(CreateTableAction(tableName, p1))
-	if p1.GetTableResponse().Err != nil {
+	if p1.GetTableResponse().Err != "" {
 		t.Error("expected to create table successfully")
 	}
 	ts.SendTableAction(JoinTableAction("fake table", p2))
-	if p2.GetTableResponse().Err == nil {
+	if p2.GetTableResponse().Err == "" {
 		t.Error("expected to fail to join table")
 	}
 	ts.SendTableAction(JoinTableAction(tableName, p2))
-	if p2.GetTableResponse().Err != nil {
+	if p2.GetTableResponse().Err != "" {
 		t.Error("expected to join table successfully")
 	}
 }
@@ -107,20 +107,20 @@ func TestSit(t *testing.T) {
 	p2.GetTableResponse()
 	p1Seat := 0
 	ts.SendTableAction(SitTableAction(tableName, p1, p1Seat))
-	if err := p1.GetTableResponse().Err; err != nil {
+	if err := p1.GetTableResponse().Err; err != "" {
 		t.Errorf("expected to sit at table successfully, failed with error: %s", err)
 	}
 	seat := 99
 	ts.SendTableAction(SitTableAction(tableName, p2, seat))
-	if p2.GetTableResponse().Err == nil {
+	if p2.GetTableResponse().Err == "" {
 		t.Errorf("expected not to sit at seat %d successfully", seat)
 	}
 	ts.SendTableAction(SitTableAction(tableName, p2, p1Seat))
-	if p2.GetTableResponse().Err == nil {
+	if p2.GetTableResponse().Err == "" {
 		t.Errorf("expected not to sit at seat %d successfully", seat)
 	}
 	ts.SendTableAction(SitTableAction(tableName, p2, 3))
-	if err := p2.GetTableResponse().Err; err != nil {
+	if err := p2.GetTableResponse().Err; err != "" {
 		t.Errorf("expected to sit successfully, failed with error: %s", err)
 	}
 }
@@ -160,11 +160,11 @@ func TestSimpleHand(t *testing.T) {
 	tableName := "test table"
 	ts, p1, p2 := createTableWithTwoPlayers(tableName)
 	ts.SendTableAction(StartTableAction(tableName, p2))
-	if r := p2.GetTableResponse(); r.Err == nil {
+	if r := p2.GetTableResponse(); r.Err == "" {
 		t.Error("only the admin should be able to start the table")
 	}
 	ts.SendTableAction(StartTableAction(tableName, p1))
-	if r := p1.GetTableResponse(); r.Err != nil {
+	if r := p1.GetTableResponse(); r.Err != "" {
 		t.Error("the admin should be able to start the table")
 	}
 	checkForUpdate(t, p1, TableUpdateT)
@@ -204,7 +204,7 @@ func TestSimpleHand(t *testing.T) {
 		t.Errorf("expected the flop, len(table.table.Board())==%d", len(table.table.Board()))
 	}
 	ts.SendTableAction(StandTableAction(tableName, p1))
-	if r := p1.GetTableResponse(); r.Err != nil {
+	if r := p1.GetTableResponse(); r.Err != "" {
 		t.Errorf("expected a successful stand, got error: %s", r.Err)
 	}
 	if !p1.playerModel.WantToStandUp {
@@ -213,7 +213,7 @@ func TestSimpleHand(t *testing.T) {
 	ts.SendTableAction(StandTableAction(tableName, p2))
 	p2.GetTableResponse()
 	sendRoundActionWithTimeout(t, p1, model.RoundAction{ActionType: model.Call})
-	if r := p1.GetRoundResponse(); r.Err != nil {
+	if r := p1.GetRoundResponse(); r.Err != "" {
 		t.Errorf("expected a successful bet, got error: %s", r.Err)
 	}
 	checkForUpdate(t, p1, RoundUpdateT)
@@ -233,7 +233,7 @@ func TestSimpleHand(t *testing.T) {
 		t.Errorf("len(table.table.Board())==%d, want 4", len(table.table.Board()))
 	}
 	sendRoundActionWithTimeout(t, p1, model.RoundAction{ActionType: model.Call})
-	if r := p1.GetRoundResponse(); r.Err != nil {
+	if r := p1.GetRoundResponse(); r.Err != "" {
 		t.Errorf("expected a successful bet, got error: %s", r.Err)
 	}
 	checkForUpdate(t, p1, RoundUpdateT)
@@ -252,7 +252,7 @@ func TestSimpleHand(t *testing.T) {
 		t.Errorf("len(table.table.Board())==%d, want 5", len(table.table.Board()))
 	}
 	sendRoundActionWithTimeout(t, p1, model.RoundAction{ActionType: model.Call})
-	if r := p1.GetRoundResponse(); r.Err != nil {
+	if r := p1.GetRoundResponse(); r.Err != "" {
 		t.Errorf("expected a successful bet, got error: %s", r.Err)
 	}
 	checkForUpdate(t, p1, RoundUpdateT)
@@ -335,7 +335,7 @@ func TestPauseMidBet(t *testing.T) {
 	checkForUpdate(t, p2, BetUpdateT)
 	checkForUpdate(t, p1, BetUpdateT)
 	sendRoundActionWithTimeout(t, p2, model.RoundAction{ActionType: model.Call})
-	if r := p2.GetRoundResponse(); r.Err != nil {
+	if r := p2.GetRoundResponse(); r.Err != "" {
 		t.Errorf("expected a successful bet, got error: %s", r.Err)
 	}
 	checkForUpdate(t, p1, RoundUpdateT)
@@ -345,20 +345,20 @@ func TestPauseMidBet(t *testing.T) {
 	ts.SendTableAction(PauseTableAction(tableName, p1))
 	checkForUpdate(t, p1, TableUpdateT)
 	checkForUpdate(t, p2, TableUpdateT)
-	if p1.GetTableResponse().Err != nil {
+	if p1.GetTableResponse().Err != "" {
 		t.Error("expected to pause table successfully")
 	}
 	ts.clock.sleep(time.Hour)
 	ts.SendTableAction(UnpauseTableAction(tableName, p1))
 	checkForUpdate(t, p1, TableUpdateT)
 	checkForUpdate(t, p2, TableUpdateT)
-	if p1.GetTableResponse().Err != nil {
+	if p1.GetTableResponse().Err != "" {
 		t.Error("expected to pause table successfully")
 	}
 	checkForUpdate(t, p1, BetUpdateT)
 	checkForUpdate(t, p2, BetUpdateT)
 	sendRoundActionWithTimeout(t, p1, model.RoundAction{ActionType: model.Call})
-	if r := p1.GetRoundResponse(); r.Err != nil {
+	if r := p1.GetRoundResponse(); r.Err != "" {
 		t.Errorf("expected a successful bet, got error: %s", r.Err)
 	}
 	checkForUpdate(t, p2, RoundUpdateT)
@@ -398,7 +398,7 @@ func checkRoundResponse(t *testing.T, p *Player, expectErr bool) *RoundActionRes
 	t.Helper()
 	select {
 	case r := <-p.responseChan:
-		if (expectErr && r.Err == nil) || (!expectErr && r.Err != nil) {
+		if (expectErr && r.Err == "") || (!expectErr && r.Err != "") {
 			t.Errorf("want err: %v, got %v", expectErr, r.Err)
 		}
 		return &r
