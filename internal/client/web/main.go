@@ -459,11 +459,58 @@ func (c *Client) renderBets(currentBets []int) {
 	for i, bet := range currentBets {
 		seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
 		betDiv := seat.Call("querySelector", ".player_bet")
-		if bet != 0 {
-			betDiv.Set("textContent", fmt.Sprintf("Bet: %d", bet))
-		} else {
-			betDiv.Set("textContent", "")
+		betDiv.Set("innerHTML", "")
+		if bet > 0 {
+			c.renderBetChips(bet, betDiv)
 		}
+	}
+}
+
+func (c *Client) renderBetChips(bet int, betDiv js.Value) {
+	if bet != 0 {
+		betDiv.Set("textContent", fmt.Sprintf("Bet: %d", bet))
+	} else {
+		betDiv.Set("textContent", "")
+	}
+	chipValues := []int{10000, 1000, 500, 100, 25, 5, 1}
+	chipColors := []string{"brown", "yellow", "blue", "black", "green", "red", "white"}
+	chipsAdded := 0
+	maxChipHeight := 10
+	stackDiv := c.document.Call("createElement", "div")
+	for i, value := range chipValues {
+		count := bet / value
+		bet -= count * value
+		for j := 0; j < count; j++ {
+			chipColumn := chipsAdded / maxChipHeight
+			chipRow := chipColumn % 2
+			chip := c.document.Call("createElement", "img")
+			chip.Set("src", fmt.Sprintf("assets/poker chips/%s.png", chipColors[i]))
+			chip.Get("style").Set("width", "30px")
+			chip.Get("style").Set("height", "30px")
+			chip.Get("style").Set("position", "absolute")
+			chip.Get("style").Set("bottom", fmt.Sprintf("%dpx", chipRow*7+(chipsAdded%maxChipHeight)*2))
+			chip.Get("style").Set("left", fmt.Sprintf("%dpx", chipColumn*7))
+			chip.Get("style").Set("z-index", (chipRow*-maxChipHeight)+(chipsAdded/maxChipHeight))
+			chipsAdded++
+			stackDiv.Call("appendChild", chip)
+			if chipsAdded%maxChipHeight == 0 {
+				betDiv.Call("appendChild", stackDiv)
+				stackDiv = c.document.Call("createElement", "div")
+			}
+		}
+		if value > 25 {
+			// Large value chips get their own stack
+			if chipsAdded%maxChipHeight > 0 {
+				chipsAdded += (maxChipHeight - (chipsAdded % maxChipHeight))
+			}
+		}
+		if chipsAdded%maxChipHeight == 0 {
+			betDiv.Call("appendChild", stackDiv)
+			stackDiv = c.document.Call("createElement", "div")
+		}
+	}
+	if chipsAdded%maxChipHeight > 0 {
+		betDiv.Call("appendChild", stackDiv)
 	}
 }
 
@@ -695,8 +742,11 @@ func (c *Client) renderPotChips(pot int) {
 			chipRow := chipColumn % 2
 			chip := c.document.Call("createElement", "img")
 			chip.Set("src", fmt.Sprintf("assets/poker chips/%s.png", chipColors[i]))
-			chip.Get("style").Set("bottom", fmt.Sprintf("%dpx", chipRow*12+(chipsAdded%maxChipHeight)*2))
-			chip.Get("style").Set("left", fmt.Sprintf("%dpx", chipColumn*12))
+			chip.Get("style").Set("width", "30px")
+			chip.Get("style").Set("height", "30px")
+			chip.Get("style").Set("position", "absolute")
+			chip.Get("style").Set("bottom", fmt.Sprintf("%dpx", chipRow*7+(chipsAdded%maxChipHeight)*2))
+			chip.Get("style").Set("left", fmt.Sprintf("%dpx", chipColumn*7))
 			chip.Get("style").Set("z-index", (chipRow*-maxChipHeight)+(chipsAdded/maxChipHeight))
 			chipsAdded++
 			stackDiv.Call("appendChild", chip)
@@ -718,7 +768,6 @@ func (c *Client) renderPotChips(pot int) {
 	}
 	if chipsAdded%maxChipHeight > 0 {
 		potChips.Call("appendChild", stackDiv)
-		stackDiv = c.document.Call("createElement", "div")
 	}
 }
 
