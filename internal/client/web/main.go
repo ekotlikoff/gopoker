@@ -679,26 +679,30 @@ func (c *Client) renderPot(pot int) {
 }
 
 func (c *Client) renderPotChips(pot int) {
-	potChips := c.document.Call("getElementById", "pot_chips")
-	potChips.Set("innerHTML", "")
 	chipValues := []int{10000, 1000, 500, 100, 25, 5, 1}
 	chipColors := []string{"brown", "yellow", "blue", "black", "green", "red", "white"}
 	chipsAdded := 0
 	maxChipHeight := 10
+	potChips := c.document.Call("getElementById", "pot_chips")
+	potChips.Set("innerHTML", "")
+	stackDiv := c.document.Call("createElement", "div")
 	for i, value := range chipValues {
 		count := pot / value
 		pot -= count * value
 		for j := 0; j < count; j++ {
-			chip := c.document.Call("createElement", "img")
-			chip.Set("src", fmt.Sprintf("assets/poker chips/%s.png", chipColors[i]))
 			chipColumn := chipsAdded / maxChipHeight
 			chipRow := chipColumn % 2
+			chip := c.document.Call("createElement", "img")
+			chip.Set("src", fmt.Sprintf("assets/poker chips/%s.png", chipColors[i]))
 			chip.Get("style").Set("bottom", fmt.Sprintf("%dpx", chipRow*12+(chipsAdded%maxChipHeight)*2))
 			chip.Get("style").Set("left", fmt.Sprintf("%dpx", chipColumn*12))
-			zIndex := (chipRow * -maxChipHeight) + (chipsAdded / maxChipHeight)
-			chip.Get("style").Set("z-index", zIndex)
+			chip.Get("style").Set("z-index", (chipRow*-maxChipHeight)+(chipsAdded/maxChipHeight))
 			chipsAdded++
-			potChips.Call("appendChild", chip)
+			stackDiv.Call("appendChild", chip)
+			if chipsAdded%maxChipHeight == 0 {
+				potChips.Call("appendChild", stackDiv)
+				stackDiv = c.document.Call("createElement", "div")
+			}
 		}
 		if value > 25 {
 			// Large value chips get their own stack
@@ -706,6 +710,14 @@ func (c *Client) renderPotChips(pot int) {
 				chipsAdded += (maxChipHeight - (chipsAdded % maxChipHeight))
 			}
 		}
+		if chipsAdded%maxChipHeight == 0 {
+			potChips.Call("appendChild", stackDiv)
+			stackDiv = c.document.Call("createElement", "div")
+		}
+	}
+	if chipsAdded%maxChipHeight > 0 {
+		potChips.Call("appendChild", stackDiv)
+		stackDiv = c.document.Call("createElement", "div")
 	}
 }
 
