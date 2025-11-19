@@ -383,7 +383,7 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 					// Player did not show their cards.
 					c.logAction(fmt.Sprintf("%s wins %d chips.", winner.Player.Name, winner.Winnings))
 				}
-				c.animateChipsToWinner(winner.Player.SeatIndex)
+				c.slideChipsToWinner(winner.Player.SeatIndex)
 			}
 		}
 	case gateway.TableActionResponseT:
@@ -773,10 +773,10 @@ func (c *Client) renderPotChips(pot int) {
 	}
 }
 
-func (c *Client) animateChipsToWinner(winnerSeat int) {
+func (c *Client) slideChipsToWinner(winnerSeat int) {
 	potChips := c.document.Call("getElementById", "pot_chips")
-	winnerSeatEl := c.document.Call("getElementById", fmt.Sprintf("seat_%d", winnerSeat))
-	winnerRect := winnerSeatEl.Call("getBoundingClientRect")
+	winnerBetEl := c.document.Call("getElementById", fmt.Sprintf("player_bet_%d", winnerSeat))
+	winnerRect := winnerBetEl.Call("getBoundingClientRect")
 	potRect := potChips.Call("getBoundingClientRect")
 	chipStacks := potChips.Get("children")
 	for i := 0; i < chipStacks.Length(); i++ {
