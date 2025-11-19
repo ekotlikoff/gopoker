@@ -497,11 +497,9 @@ func (c *Client) renderBetChips(bet int, betDiv js.Value) {
 			// Large value chips get their own stack
 			if chipsAdded%maxChipHeight > 0 {
 				chipsAdded += (maxChipHeight - (chipsAdded % maxChipHeight))
+				betDiv.Call("appendChild", stackDiv)
+				stackDiv = c.document.Call("createElement", "div")
 			}
-		}
-		if chipsAdded%maxChipHeight == 0 {
-			betDiv.Call("appendChild", stackDiv)
-			stackDiv = c.document.Call("createElement", "div")
 		}
 	}
 	if chipsAdded%maxChipHeight > 0 {
@@ -765,11 +763,9 @@ func (c *Client) renderPotChips(pot int) {
 			// Large value chips get their own stack
 			if chipsAdded%maxChipHeight > 0 {
 				chipsAdded += (maxChipHeight - (chipsAdded % maxChipHeight))
+				potChips.Call("appendChild", stackDiv)
+				stackDiv = c.document.Call("createElement", "div")
 			}
-		}
-		if chipsAdded%maxChipHeight == 0 {
-			potChips.Call("appendChild", stackDiv)
-			stackDiv = c.document.Call("createElement", "div")
 		}
 	}
 	if chipsAdded%maxChipHeight > 0 {
