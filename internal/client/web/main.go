@@ -359,6 +359,10 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 			switch action.ActionType {
 			case model.Fold:
 				c.logAction(fmt.Sprintf("%s folds.", update.PlayerUpdate.CurrentBetter))
+				c.slideBetToPot(update.PlayerUpdate.CurrentSeat, update.PlayerUpdate.CurrentBets)
+				if update.PlayerUpdate.CurrentBetter == c.player.Name {
+					c.document.Call("getElementById", "player_hand").Set("innerHTML", "")
+				}
 			case model.Check:
 				c.logAction(fmt.Sprintf("%s checks.", update.PlayerUpdate.CurrentBetter))
 			case model.Call:
@@ -367,10 +371,11 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 				c.logAction(fmt.Sprintf("%s raises to %d.", update.PlayerUpdate.CurrentBetter, action.Bet))
 				c.document.Call("getElementById", "current_bet_amount").Set("value", action.Bet)
 			}
-			if update.PlayerUpdate.RoundAction.ActionType == model.Fold && update.PlayerUpdate.CurrentBetter == c.player.Name {
-				c.document.Call("getElementById", "player_hand").Set("innerHTML", "")
+			if update.PlayerUpdate.RoundDone && !update.PlayerUpdate.HandDone {
+				c.slideBetsToPot(update.PlayerUpdate.CurrentBets)
+			} else if !update.PlayerUpdate.HandDone && update.PlayerUpdate.RoundAction.ActionType != model.Fold {
+				c.renderBets(update.PlayerUpdate.CurrentBets)
 			}
-			c.renderBets(update.PlayerUpdate.CurrentBets)
 			c.renderPot(update.PlayerUpdate.Pot)
 			c.renderFunds(update.PlayerUpdate.CurrentFunds)
 		case tableserver.DealUpdateT:
@@ -383,7 +388,8 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 					// Player did not show their cards.
 					c.logAction(fmt.Sprintf("%s wins %d chips.", winner.Player.Name, winner.Winnings))
 				}
-				c.slideChipsToWinner(winner.Player.SeatIndex)
+				c.slideBetsToWinner(winner.Player.SeatIndex, make([]int, model.MaxTableSize))
+				c.slidePotToWinner(winner.Player.SeatIndex)
 			}
 		}
 	case gateway.TableActionResponseT:
@@ -459,6 +465,8 @@ func (c *Client) renderBets(currentBets []int) {
 	for i, bet := range currentBets {
 		betDiv := c.document.Call("getElementById", fmt.Sprintf("player_bet_%d", i))
 		betDiv.Set("innerHTML", "")
+		betDiv.Get("style").Set("transform", "")
+		betDiv.Get("style").Set("transition", "")
 		if bet > 0 {
 			c.renderBetChips(bet, betDiv)
 		}
@@ -737,6 +745,8 @@ func (c *Client) renderPotChips(pot int) {
 	maxChipHeight := 10
 	potChips := c.document.Call("getElementById", "pot_chips")
 	potChips.Set("innerHTML", "")
+	potChips.Get("style").Set("transition", "")
+	potChips.Get("style").Set("transform", "")
 	stackDiv := c.document.Call("createElement", "div")
 	for i, value := range chipValues {
 		count := pot / value
@@ -773,17 +783,56 @@ func (c *Client) renderPotChips(pot int) {
 	}
 }
 
-func (c *Client) slideChipsToWinner(winnerSeat int) {
+func (c *Client) slidePotToWinner(winnerSeat int) {
 	potChips := c.document.Call("getElementById", "pot_chips")
 	winnerBetEl := c.document.Call("getElementById", fmt.Sprintf("player_bet_%d", winnerSeat))
 	winnerRect := winnerBetEl.Call("getBoundingClientRect")
 	potRect := potChips.Call("getBoundingClientRect")
-	chipStacks := potChips.Get("children")
-	for i := 0; i < chipStacks.Length(); i++ {
-		stack := chipStacks.Index(i)
-		stack.Get("style").Set("transition", "all 1s ease-in-out")
-		stack.Get("style").Set("transform", fmt.Sprintf("translate(%dpx, %dpx)", winnerRect.Get("left").Int()-potRect.Get("left").Int(), winnerRect.Get("top").Int()-potRect.Get("top").Int()))
+	potChips.Get("style").Set("transition", "all 1s ease-in-out")
+	potChips.Get("style").Set("transform", fmt.Sprintf("translate(%dpx, %dpx)", winnerRect.Get("left").Int()-potRect.Get("left").Int(), winnerRect.Get("top").Int()-potRect.Get("top").Int()))
+}
+
+func (c *Client) slideBetToPot(seat int, currentBets []int) {
+	potChips := c.document.Call("getElementById", "pot_chips")
+	potRect := potChips.Call("getBoundingClientRect")
+	betEl := c.document.Call("getElementById", fmt.Sprintf("player_bet_%d", seat))
+	betRect := betEl.Call("getBoundingClientRect")
+	betEl.Get("style").Set("transition", "all 1s ease-in-out")
+	betEl.Get("style").Set("transform", fmt.Sprintf("translate(%dpx, %dpx)", potRect.Get("left").Int()-betRect.Get("left").Int(), potRect.Get("top").Int()-betRect.Get("top").Int()))
+	js.Global().Call("setTimeout", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		c.renderBets(currentBets)
+		return nil
+	}), 1000)
+}
+
+func (c *Client) slideBetsToPot(currentBets []int) {
+	potChips := c.document.Call("getElementById", "pot_chips")
+	potRect := potChips.Call("getBoundingClientRect")
+	for i := 0; i < model.MaxTableSize; i++ {
+		betEl := c.document.Call("getElementById", fmt.Sprintf("player_bet_%d", i))
+		betRect := betEl.Call("getBoundingClientRect")
+		betEl.Get("style").Set("transition", "all 1s ease-in-out")
+		betEl.Get("style").Set("transform", fmt.Sprintf("translate(%dpx, %dpx)", potRect.Get("left").Int()-betRect.Get("left").Int(), potRect.Get("top").Int()-betRect.Get("top").Int()))
 	}
+	js.Global().Call("setTimeout", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		c.renderBets(currentBets)
+		return nil
+	}), 1000)
+}
+
+func (c *Client) slideBetsToWinner(winnerSeat int, currentBets []int) {
+	winnerBetEl := c.document.Call("getElementById", fmt.Sprintf("player_bet_%d", winnerSeat))
+	winnerRect := winnerBetEl.Call("getBoundingClientRect")
+	for i := 0; i < model.MaxTableSize; i++ {
+		betEl := c.document.Call("getElementById", fmt.Sprintf("player_bet_%d", i))
+		betRect := betEl.Call("getBoundingClientRect")
+		betEl.Get("style").Set("transition", "all 1s ease-in-out")
+		betEl.Get("style").Set("transform", fmt.Sprintf("translate(%dpx, %dpx)", winnerRect.Get("left").Int()-betRect.Get("left").Int(), winnerRect.Get("top").Int()-betRect.Get("top").Int()))
+	}
+	js.Global().Call("setTimeout", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		c.renderBets(currentBets)
+		return nil
+	}), 1000)
 }
 
 func (c *Client) renderCommunityCards(cards []poker.Card) {

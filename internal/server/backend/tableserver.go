@@ -108,6 +108,12 @@ type (
 		CurrentFunds []int
 		// Pot is the total pot in the hand.
 		Pot int
+		// RoundDone marks whether the round of betting is done or not.
+		RoundDone bool
+		// RoundEndedWithFold marks whether the round of betting ended with a fold or not.
+		RoundEndedWithFold bool
+		// HandDone marks whether the hand is done.
+		HandDone bool
 		// Table contains the full table state, sent upon first connection.
 		Table SerializableTable
 		// TableAction is a table action that may be relevant to a client.
@@ -840,15 +846,18 @@ func newBetUpdate(p *Player, timeRemaining time.Duration, timeElapsed time.Durat
 	}
 }
 
-func (t *Table) newRoundUpdate(a model.RoundAction, p *model.Player) *PlayerUpdate {
+func (t *Table) newRoundUpdate(a model.RoundAction, p *model.Player, roundDone, roundEndedWithFold, handDone bool) *PlayerUpdate {
 	return &PlayerUpdate{
-		Type:          RoundUpdateT,
-		RoundAction:   a,
-		CurrentBetter: p.Name,
-		CurrentSeat:   p.SeatIndex,
-		CurrentBets:   t.currentBets(),
-		CurrentFunds:  t.currentFunds(),
-		Pot:           t.Hand().Pot.MainPot.Pot,
+		Type:               RoundUpdateT,
+		RoundAction:        a,
+		CurrentBetter:      p.Name,
+		CurrentSeat:        p.SeatIndex,
+		CurrentBets:        t.currentBets(),
+		CurrentFunds:       t.currentFunds(),
+		Pot:                t.Hand().Pot.MainPot.Pot,
+		RoundDone:          roundDone,
+		RoundEndedWithFold: roundEndedWithFold,
+		HandDone:           handDone,
 	}
 }
 
@@ -871,7 +880,7 @@ func (t *Table) listenForPlayerActions() {
 			err := t.table.HandlePlayerAction(player, a)
 			elapsedTime = elapsed
 			if err == nil {
-				t.sendPlayerUpdates(t.newRoundUpdate(a, player))
+				t.sendPlayerUpdates(t.newRoundUpdate(a, player, t.table.RoundDone(), t.table.Hand.RoundEndedWithFold, t.table.Hand.HandDone))
 				success = true
 			} else {
 				log.Println(err)

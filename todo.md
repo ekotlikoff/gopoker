@@ -2,11 +2,10 @@
 
 #### Must have
 1. Admin able to change chip counts during pause
-1. Show player chips
-1. Visualize winner after a hand with chip sliding animation
 1. Show winner's cards (if applicable, not if they win on a fold)
 1. Show cards on all-in
 1. All in is buggy, fix
+1. Add all in button
 1. Visualize multiple pots during all in side pot situations
 
 #### Nice to have
@@ -15,6 +14,7 @@
 1. Add ability to configure table when creating
 
 ## Done
+1. Visualize winner after a hand with chip sliding animation
 1. Log when invalid move is made
 1. Make pot prettier
 1. Visualize remaining time to bet
