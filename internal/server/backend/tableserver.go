@@ -869,7 +869,7 @@ func errorToString(e error) string {
 }
 
 func (t *Table) listenForPlayerActions() {
-	for !t.table.RoundDone() && !t.table.BettingDone() && !t.table.HandDone() {
+	for !t.table.RoundDone() && !t.table.HandDone() {
 		success := false
 		player := t.table.CurrentBetter()
 		timeRemaining := t.getTimeToBet()

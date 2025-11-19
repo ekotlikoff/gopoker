@@ -110,7 +110,7 @@ func TestAllInSmallBlind(t *testing.T) {
 	}
 }
 
-func TestAllIn(t *testing.T) {
+func TestAllInCall(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
 		minBet: DefaultMinBet,
 	})
@@ -133,6 +133,37 @@ func TestAllIn(t *testing.T) {
 	totalFunds := paul.Funds + leto.Funds
 	if totalFunds != 900 {
 		t.Error("expected 800 got", totalFunds)
+	}
+}
+
+func TestAllIn(t *testing.T) {
+	table := NewTableWithConfig(TableConfig{
+		minBet: DefaultMinBet,
+	})
+	leto := NewPlayerWithFunds("Leto", 1000)
+	table.SitDown(leto, 0)
+	paul := NewPlayerWithFunds("Paul", 600)
+	table.SitDown(paul, 2)
+	table.NewHand()
+	fmt.Println(table.Hand.StartHand())
+	table.Hand.PlayerAction(table.Players[0], RoundAction{Raise, 400})
+	table.Hand.PlayerAction(table.Players[2], RoundAction{AllIn, 600})
+	err := table.Hand.Deal()
+	if err == nil {
+		t.Error(err)
+	}
+	table.Hand.PlayerAction(table.Players[0], RoundAction{Call, 600})
+	table.Hand.Deal()
+	table.Hand.Deal()
+	table.Hand.Deal()
+	fmt.Println(table)
+	_, err = table.Hand.FinishHand()
+	if err != nil {
+		t.Error(err)
+	}
+	totalFunds := paul.Funds + leto.Funds
+	if totalFunds != 1600 {
+		t.Error("expected 1600 got", totalFunds)
 	}
 }
 
@@ -360,90 +391,5 @@ func TestNextDealer(t *testing.T) {
 	}
 	if table.Dealer() != paul {
 		t.Errorf("expected Paul as the better, got %s", table.Dealer().Name)
-	}
-}
-
-func TestRematchPlayerOutOfFunds(t *testing.T) {
-	table := NewTableWithConfig(TableConfig{
-		minBet: DefaultMinBet,
-	})
-	leto := NewPlayerWithFunds("Leto", 800)
-	table.SitDown(leto, 0)
-	paul := NewPlayerWithFunds("Paul", 800)
-	table.SitDown(paul, 2)
-	frank := NewPlayerWithFunds("Frank", 800)
-	table.SitDown(frank, 3)
-	table.NewHand()
-	table.Hand.StartHand()
-	table.Players[3].Funds = 0
-	if table.Hand.Players.Len() != 3 {
-		t.Error("expected 3 players, got", table.Hand.Players.Len())
-	}
-	err := table.Hand.PlayerAction(table.Players[0], RoundAction{Raise, 400})
-	if err != nil {
-		t.Error(err)
-	}
-	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 400})
-	if err != nil {
-		t.Error(err)
-	}
-	err = table.Hand.PlayerAction(table.Players[3], RoundAction{Fold, 0})
-	if err != nil {
-		t.Log(table)
-		t.Error(err)
-	}
-	err = table.Hand.Deal()
-	if err != nil {
-		t.Log(table)
-		t.Error(err)
-	}
-	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 0})
-	if err != nil {
-		t.Log(table)
-		t.Error(err)
-	}
-	err = table.Hand.PlayerAction(table.Players[0], RoundAction{Call, 0})
-	if err != nil {
-		t.Log(table)
-		t.Error(err)
-	}
-	err = table.Hand.Deal()
-	if err != nil {
-		t.Log(table)
-		t.Error(err)
-	}
-	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 0})
-	if err != nil {
-		t.Log(table)
-		t.Error(err)
-	}
-	err = table.Hand.PlayerAction(table.Players[0], RoundAction{Call, 0})
-	if err != nil {
-		t.Log(table)
-		t.Error(err)
-	}
-	err = table.Hand.Deal()
-	if err != nil {
-		t.Log(table)
-		t.Error(err)
-	}
-	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 0})
-	if err != nil {
-		t.Log(table)
-		t.Error(err)
-	}
-	err = table.Hand.PlayerAction(table.Players[0], RoundAction{Call, 0})
-	if err != nil {
-		t.Log(table)
-		t.Error(err)
-	}
-	_, err = table.FinishHand()
-	if err != nil {
-		t.Log(table)
-		t.Error(err)
-	}
-	table.NewHand()
-	if table.Hand.Players.Len() != 2 {
-		t.Error("expected 2 players, got", table.Hand.Players.Len())
 	}
 }

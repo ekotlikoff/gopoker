@@ -285,6 +285,69 @@ func TestSimpleHand(t *testing.T) {
 	}
 }
 
+func TestAllIn(t *testing.T) {
+	tableName := "test table"
+	ts, p1, p2 := createTableWithTwoPlayers(tableName)
+	ts.SendTableAction(StartTableAction(tableName, p2))
+	if r := p2.GetTableResponse(); r.Err == "" {
+		t.Error("only the admin should be able to start the table")
+	}
+	ts.SendTableAction(StartTableAction(tableName, p1))
+	if r := p1.GetTableResponse(); r.Err != "" {
+		t.Error("the admin should be able to start the table")
+	}
+	checkForUpdate(t, p1, TableUpdateT)
+	checkForUpdate(t, p2, TableUpdateT)
+	checkForUpdate(t, p1, NewHandUpdateT)
+	u := checkForUpdate(t, p2, NewHandUpdateT)
+	if u.Hole == nil {
+		t.Errorf("expected player hand provided in NewHandUpdateT, u.Hole == nil")
+	}
+	table := ts.tables[tableName]
+	if !table.playing {
+		t.Error("table should be playing")
+	}
+	if table.dealer() != p2.playerModel.Name {
+		t.Errorf("dealer should be '%v', got '%v'", p2.playerModel.Name, table.dealer())
+	}
+	checkForUpdate(t, p2, BetUpdateT)
+	checkForUpdate(t, p1, BetUpdateT)
+	sendRoundActionWithTimeout(t, p2, model.RoundAction{ActionType: model.AllIn})
+	checkRoundResponse(t, p2, false)
+	checkForUpdate(t, p1, RoundUpdateT)
+	checkForUpdate(t, p2, RoundUpdateT)
+	checkForUpdate(t, p1, BetUpdateT)
+	checkForUpdate(t, p2, BetUpdateT)
+	sendRoundActionWithTimeout(t, p1, model.RoundAction{ActionType: model.AllIn})
+	checkRoundResponse(t, p1, false)
+	checkForUpdate(t, p2, RoundUpdateT)
+	update := checkForUpdate(t, p1, RoundUpdateT)
+	if update.CurrentBetter != p1.playerModel.Name {
+		t.Errorf("expected p1, got %s", update.CurrentBetter)
+	}
+	checkForUpdate(t, p1, DealUpdateT)
+	checkForUpdate(t, p2, DealUpdateT)
+	checkForUpdate(t, p1, DealUpdateT)
+	checkForUpdate(t, p2, DealUpdateT)
+	checkForUpdate(t, p1, DealUpdateT)
+	checkForUpdate(t, p2, DealUpdateT)
+	checkForUpdate(t, p1, HandOverUpdateT)
+	checkForUpdate(t, p2, HandOverUpdateT)
+	checkForUpdate(t, p1, TableUpdateT)
+	update = checkForUpdate(t, p2, TableUpdateT)
+	if update.TableAction.TableActionType != Stand {
+		t.Errorf("expected stand update, got %v", update.TableAction.TableActionType)
+	}
+	update = checkForUpdate(t, p2, StateUpdateT)
+	if len(update.StateUpdate.NowStanding) != 1 {
+		t.Errorf("expected one stander, got %d", len(update.StateUpdate.NowStanding))
+	}
+	update = <-p2.TableUpdateChan
+	if !update.StateUpdate.PlayStopped {
+		t.Error("expected play to stop after standing")
+	}
+}
+
 func TestTimeoutMidBet(t *testing.T) {
 	tableName := "test table"
 	ts, p1, p2 := createTableWithTwoPlayers(tableName)

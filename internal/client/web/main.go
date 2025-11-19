@@ -59,6 +59,7 @@ type Client struct {
 	unpauseGameButton js.Value
 	betButton         js.Value
 	foldButton        js.Value
+	allInButton       js.Value
 	betTimer          js.Value
 	betTimeRemaining  time.Duration
 	betTimeElapsed    time.Duration
@@ -88,6 +89,7 @@ func makeClient() *Client {
 		unpauseGameButton: d.Call("getElementById", "unpause_game_button"),
 		betButton:         d.Call("getElementById", "bet_button"),
 		foldButton:        d.Call("getElementById", "fold_button"),
+		allInButton:       d.Call("getElementById", "all_in_button"),
 	}
 }
 
@@ -107,6 +109,7 @@ func (c *Client) initLobby() {
 	c.unpauseGameButton.Set("onclick", js.FuncOf(c.unpause))
 	c.betButton.Set("onclick", js.FuncOf(c.bet))
 	c.foldButton.Set("onclick", js.FuncOf(c.fold))
+	c.allInButton.Set("onclick", js.FuncOf(c.allIn))
 }
 
 func (c *Client) login(this js.Value, args []js.Value) interface{} {
@@ -367,8 +370,14 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 				c.logAction(fmt.Sprintf("%s checks.", update.PlayerUpdate.CurrentBetter))
 			case model.Call:
 				c.logAction(fmt.Sprintf("%s calls.", update.PlayerUpdate.CurrentBetter))
+				// TODO call as the final action in the round should be visualized as a bet in the UI
+				// probably will require sending out the current single RoundUpdate with all zero bets
+				// earlier before they're zeroed out.
 			case model.Raise:
 				c.logAction(fmt.Sprintf("%s raises to %d.", update.PlayerUpdate.CurrentBetter, action.Bet))
+				c.document.Call("getElementById", "current_bet_amount").Set("value", action.Bet)
+			case model.AllIn:
+				c.logAction(fmt.Sprintf("%s is all in with %d.", update.PlayerUpdate.CurrentBetter, action.Bet))
 				c.document.Call("getElementById", "current_bet_amount").Set("value", action.Bet)
 			}
 			if update.PlayerUpdate.RoundDone && !update.PlayerUpdate.HandDone {
@@ -683,6 +692,11 @@ func (c *Client) bet(this js.Value, args []js.Value) interface{} {
 
 func (c *Client) fold(this js.Value, args []js.Value) interface{} {
 	c.send(gateway.PlayerRequest{Type: gateway.RoundActionT, RoundAction: model.RoundAction{ActionType: model.Fold}})
+	return nil
+}
+
+func (c *Client) allIn(this js.Value, args []js.Value) interface{} {
+	c.send(gateway.PlayerRequest{Type: gateway.RoundActionT, RoundAction: model.RoundAction{ActionType: model.AllIn}})
 	return nil
 }
 

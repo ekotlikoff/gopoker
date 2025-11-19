@@ -55,7 +55,6 @@ type (
 		Standing      bool
 		WantToStandUp bool
 		SeatIndex     int
-		AllIn         bool
 		Hole          []poker.Card
 		Funds         int
 		BetAmount     int
@@ -308,6 +307,11 @@ func (p *Player) StandUp() {
 	p.WantToStandUp = true
 }
 
+// AllIn returns true if the player is all in.
+func (p *Player) AllIn() bool {
+	return p.Funds <= 0 && p.BetAmount > 0
+}
+
 // RoundDone gets whether the round is done
 func (t *Table) RoundDone() bool {
 	t.mutex.Lock()
@@ -381,8 +385,10 @@ func (t *Table) String() string {
 	for i, p := range t.Players {
 		seat := "Seat: " + fmt.Sprint(i) + ", " + fmt.Sprint(p)
 		out += seat
-		if p == RingToPlayer(t.Hand.Round.BetTurn) {
-			out += " (B) "
+		if t.Hand.Round != nil {
+			if p == RingToPlayer(t.Hand.Round.BetTurn) {
+				out += " (B) "
+			}
 		}
 		if p == t.Hand.Dealer() {
 			out += " (D) "

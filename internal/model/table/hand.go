@@ -192,13 +192,7 @@ func (hand *Hand) takeBlinds() {
 	hand.SmallBlind().BetAmount = hand.TableConfig.minBet / 2
 	hand.BigBlind().Funds -= hand.TableConfig.minBet
 	hand.BigBlind().BetAmount = hand.TableConfig.minBet
-	if hand.SmallBlind().Funds == 0 {
-		hand.SmallBlind().AllIn = true
-	}
-	if hand.BigBlind().Funds == 0 {
-		hand.BigBlind().AllIn = true
-	}
-	if (hand.SmallBlind().AllIn || hand.BigBlind().AllIn) &&
+	if (hand.SmallBlind().AllIn() || hand.BigBlind().AllIn()) &&
 		hand.Players.Len() == 2 {
 		hand.Round.RoundDone = true
 		hand.BettingDone = true
@@ -240,9 +234,6 @@ func (hand *Hand) playerBet(player *Player, bet int) error {
 	if hand.FirstToBet == nil {
 		hand.FirstToBet = hand.Round.BetTurn
 	}
-	if allIn {
-		player.AllIn = true
-	}
 	player.Funds -= (bet - player.BetAmount)
 	player.BetAmount = bet
 	return nil
@@ -263,6 +254,7 @@ func (hand *Hand) PlayerAction(
 	case Call:
 		err = hand.playerBet(player, hand.Round.CurrentBet)
 	case AllIn:
+		action.Bet = player.Funds + player.BetAmount
 		if player.Funds != action.Bet-player.BetAmount {
 			return fmt.Errorf("playeraction: this is not an all in, funds=%d bet=%d",
 				player.Funds, action.Bet)
@@ -307,7 +299,7 @@ func (hand *Hand) nextBetter() {
 		if hand.FirstToBet != nil && player == RingToPlayer(hand.FirstToBet) {
 			log.Println("Back to firsttobet, ending the round", player.Name)
 			break
-		} else if !player.AllIn {
+		} else if !player.AllIn() {
 			log.Println("Found better", RingToPlayer(better).Name)
 			hand.Round.BetTurn = better
 			return
@@ -342,7 +334,7 @@ func (hand *Hand) BetterCount() int {
 	better := hand.Round.BetTurn
 	for i := 0; i < better.Len(); i++ {
 		player := RingToPlayer(better)
-		if !player.AllIn {
+		if !player.AllIn() {
 			betters++
 		}
 		better = better.Next()
