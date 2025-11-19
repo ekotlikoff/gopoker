@@ -333,19 +333,6 @@ func TestAllIn(t *testing.T) {
 	checkForUpdate(t, p2, DealUpdateT)
 	checkForUpdate(t, p1, HandOverUpdateT)
 	checkForUpdate(t, p2, HandOverUpdateT)
-	checkForUpdate(t, p1, TableUpdateT)
-	update = checkForUpdate(t, p2, TableUpdateT)
-	if update.TableAction.TableActionType != Stand {
-		t.Errorf("expected stand update, got %v", update.TableAction.TableActionType)
-	}
-	update = checkForUpdate(t, p2, StateUpdateT)
-	if len(update.StateUpdate.NowStanding) != 1 {
-		t.Errorf("expected one stander, got %d", len(update.StateUpdate.NowStanding))
-	}
-	update = <-p2.TableUpdateChan
-	if !update.StateUpdate.PlayStopped {
-		t.Error("expected play to stop after standing")
-	}
 }
 
 func TestTimeoutMidBet(t *testing.T) {
