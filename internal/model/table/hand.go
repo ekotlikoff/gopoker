@@ -93,22 +93,23 @@ func (t *Table) NewHand() error {
 }
 
 // FinishHand ends a hand and handles standing players up
-func (t *Table) FinishHand() ([]Winner, error) {
+func (t *Table) FinishHand() ([]Winner, int, error) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
+	finalBetterCount := t.Hand.BetterCount()
 	winners, err := t.Hand.FinishHand()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	// Clear player holes and handle standups
-	t.Hand.Players.Do(func(p interface{}) {
+	t.Hand.Players.Do(func(p any) {
 		player := p.(*Player)
 		player.Hole = []poker.Card{}
 		if player.Funds == 0 {
 			player.StandUp()
 		}
 	})
-	return winners, t.incrementDealerIndex()
+	return winners, finalBetterCount, t.incrementDealerIndex()
 }
 
 // RingToPlayer converts from a ring buffer to a player
@@ -184,14 +185,14 @@ func (hand *Hand) BigBlind() *Player {
 
 // BigBlindAmount is the amount for this hand's big blind.
 func (hand *Hand) BigBlindAmount() int {
-	return hand.TableConfig.minBet
+	return hand.TableConfig.MinBet
 }
 
 func (hand *Hand) takeBlinds() {
-	hand.SmallBlind().Funds -= hand.TableConfig.minBet / 2
-	hand.SmallBlind().BetAmount = hand.TableConfig.minBet / 2
-	hand.BigBlind().Funds -= hand.TableConfig.minBet
-	hand.BigBlind().BetAmount = hand.TableConfig.minBet
+	hand.SmallBlind().Funds -= hand.TableConfig.MinBet / 2
+	hand.SmallBlind().BetAmount = hand.TableConfig.MinBet / 2
+	hand.BigBlind().Funds -= hand.TableConfig.MinBet
+	hand.BigBlind().BetAmount = hand.TableConfig.MinBet
 	if (hand.SmallBlind().AllIn() || hand.BigBlind().AllIn()) &&
 		hand.Players.Len() == 2 {
 		hand.Round.RoundDone = true
@@ -206,7 +207,7 @@ func (hand *Hand) startBets() {
 	}
 	log.Println("board length", len(hand.Board))
 	if len(hand.Board) == 0 {
-		hand.Round.CurrentBet = hand.TableConfig.minBet
+		hand.Round.CurrentBet = hand.TableConfig.MinBet
 		hand.takeBlinds()
 		// Play always starts left of the big blind.
 		hand.Round.BetTurn = hand.bigBlindRing()
@@ -225,7 +226,7 @@ func (hand *Hand) playerBet(player *Player, bet int) error {
 	} else if bet < hand.Round.CurrentBet && !allIn {
 		return errors.New("insufficient bet")
 	} else if raise {
-		if bet-hand.Round.CurrentBet < hand.TableConfig.minBet {
+		if bet-hand.Round.CurrentBet < hand.TableConfig.MinBet {
 			return errors.New("cannot raise less than the big blind")
 		}
 		hand.Round.CurrentBet = bet

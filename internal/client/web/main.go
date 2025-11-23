@@ -377,7 +377,7 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 				c.logAction(fmt.Sprintf("%s is all in with %d.", update.PlayerUpdate.CurrentBetter, action.Bet))
 				c.document.Call("getElementById", "current_bet_amount").Set("value", action.Bet)
 			}
-			if update.PlayerUpdate.RoundDone && !update.PlayerUpdate.HandDone {
+			if update.PlayerUpdate.RoundDone && update.PlayerUpdate.RoundAction.ActionType != model.Fold {
 				c.slideBetsToPot(update.PlayerUpdate)
 			} else if !update.PlayerUpdate.HandDone && update.PlayerUpdate.RoundAction.ActionType != model.Fold {
 				c.renderBets(update.PlayerUpdate.CurrentBets)
@@ -387,16 +387,22 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 		case tableserver.DealUpdateT:
 			c.renderCommunityCards(update.PlayerUpdate.Board)
 		case tableserver.HandOverUpdateT:
-			for _, winner := range update.PlayerUpdate.Winners {
-				if winner.Player.Hole != nil {
-					c.logAction(fmt.Sprintf("%s wins %d chips with %s.", winner.Player.Name, winner.Winnings, poker.RankString(winner.Player.HandRank)))
-				} else {
-					// Player did not show their cards.
-					c.logAction(fmt.Sprintf("%s wins %d chips.", winner.Player.Name, winner.Winnings))
+			js.Global().Call("setTimeout", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+				for _, winner := range update.PlayerUpdate.Winners {
+					if winner.Winnings == 0 {
+						continue
+					}
+					if winner.Player.Hole != nil {
+						c.logAction(fmt.Sprintf("%s wins %d chips with %s.", winner.Player.Name, winner.Winnings, poker.RankString(winner.Player.HandRank)))
+					} else {
+						// Player did not show their cards.
+						c.logAction(fmt.Sprintf("%s wins %d chips.", winner.Player.Name, winner.Winnings))
+					}
+					c.slideBetsToWinner(winner.Player.SeatIndex, make([]int, model.MaxTableSize))
+					c.slidePotToWinner(winner.Player.SeatIndex, update.PlayerUpdate.CurrentFunds)
 				}
-				c.slideBetsToWinner(winner.Player.SeatIndex, make([]int, model.MaxTableSize))
-				c.slidePotToWinner(winner.Player.SeatIndex)
-			}
+				return nil
+			}), update.PlayerUpdate.TimeBetweenHands.Milliseconds()/3)
 		}
 	case gateway.TableActionResponseT:
 		if update.TableActionResponse.Err != "" {
@@ -794,13 +800,17 @@ func (c *Client) renderPotChips(pot int) {
 	}
 }
 
-func (c *Client) slidePotToWinner(winnerSeat int) {
+func (c *Client) slidePotToWinner(winnerSeat int, currentFunds []int) {
 	potChips := c.document.Call("getElementById", "pot_chips")
 	winnerBetEl := c.document.Call("getElementById", fmt.Sprintf("player_bet_%d", winnerSeat))
 	winnerRect := winnerBetEl.Call("getBoundingClientRect")
 	potRect := potChips.Call("getBoundingClientRect")
 	potChips.Get("style").Set("transition", "all 1s ease-in-out")
 	potChips.Get("style").Set("transform", fmt.Sprintf("translate(%dpx, %dpx)", winnerRect.Get("left").Int()-potRect.Get("left").Int(), winnerRect.Get("top").Int()-potRect.Get("top").Int()))
+	js.Global().Call("setTimeout", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		c.renderFunds(currentFunds)
+		return nil
+	}), 1000)
 }
 
 func (c *Client) slideBetToPot(seat int, currentBets []int) {

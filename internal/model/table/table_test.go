@@ -112,7 +112,7 @@ func TestAllInSmallBlind(t *testing.T) {
 
 func TestAllInCall(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DefaultMinBet,
+		MinBet: DefaultMinBet,
 	})
 	leto := NewPlayerWithFunds("Leto", 500)
 	table.SitDown(leto, 0)
@@ -138,7 +138,7 @@ func TestAllInCall(t *testing.T) {
 
 func TestAllIn(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DefaultMinBet,
+		MinBet: DefaultMinBet,
 	})
 	leto := NewPlayerWithFunds("Leto", 1000)
 	table.SitDown(leto, 0)
@@ -169,7 +169,7 @@ func TestAllIn(t *testing.T) {
 
 func TestFoldWin(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DefaultMinBet,
+		MinBet: DefaultMinBet,
 	})
 	leto := NewPlayerWithFunds("Leto", 400)
 	table.SitDown(leto, 0)
@@ -193,7 +193,7 @@ func TestFoldWin(t *testing.T) {
 
 func TestRematch(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DefaultMinBet,
+		MinBet: DefaultMinBet,
 	})
 	leto := NewPlayerWithFunds("Leto", 400)
 	table.SitDown(leto, 0)
@@ -206,7 +206,7 @@ func TestRematch(t *testing.T) {
 		t.Error(err)
 	}
 	fmt.Println(table)
-	_, err = table.FinishHand()
+	_, _, err = table.FinishHand()
 	if err != nil {
 		t.Error(err)
 	}
@@ -221,7 +221,7 @@ func TestRematch(t *testing.T) {
 		t.Error(err)
 	}
 	fmt.Println(table)
-	_, err = table.FinishHand()
+	_, _, err = table.FinishHand()
 	if err != nil {
 		t.Error(err)
 	}
@@ -233,7 +233,7 @@ func TestRematch(t *testing.T) {
 
 func TestFold(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DefaultMinBet,
+		MinBet: DefaultMinBet,
 	})
 	leto := NewPlayerWithFunds("Leto", 400)
 	table.SitDown(leto, 0)
@@ -263,7 +263,7 @@ func TestFold(t *testing.T) {
 	if table.Hand.Players.Len() != 1 {
 		t.Error("expected 1 players, got", table.Hand.Players.Len())
 	}
-	_, err = table.FinishHand()
+	_, _, err = table.FinishHand()
 	if err != nil {
 		t.Log(table)
 		t.Error(err)
@@ -277,7 +277,7 @@ func TestFold(t *testing.T) {
 
 func TestFirstBetterFolds(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DefaultMinBet,
+		MinBet: DefaultMinBet,
 	})
 	leto := NewPlayerWithFunds("Leto", 400)
 	table.SitDown(leto, 0)
@@ -313,7 +313,7 @@ func TestFirstBetterFolds(t *testing.T) {
 
 func TestRaiseAndCall(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DefaultMinBet,
+		MinBet: DefaultMinBet,
 	})
 	leto := NewPlayerWithFunds("Leto", 400)
 	table.SitDown(leto, 0)
@@ -355,7 +355,7 @@ func TestRaiseAndCall(t *testing.T) {
 
 func TestNextDealer(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
-		minBet: DefaultMinBet,
+		MinBet: DefaultMinBet,
 	})
 	leto := NewPlayerWithFunds("Leto", 800)
 	table.SitDown(leto, 1)
@@ -379,7 +379,7 @@ func TestNextDealer(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = table.FinishHand()
+	_, _, err = table.FinishHand()
 	if err != nil {
 		t.Log(table)
 		t.Error(err)

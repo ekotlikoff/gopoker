@@ -1,12 +1,10 @@
 ## TODO
 
 #### Must have
-1. Add configurable delay in tableserver between hands / deals / etc
 1. Admin able to change chip counts during pause
 1. Show winner's cards (if applicable, not if they win on a fold)
 1. Show cards on all-in
 1. Visualize multiple pots during all in side pot situations
-1. Call as final bet in round should be visualized better
 
 #### Nice to have
 1. Support custom player avatars w/ nano banana or similar
@@ -14,6 +12,8 @@
 1. Add ability to configure table when creating
 
 ## Done
+1. Call as final bet in round should be visualized better
+1. Add configurable delay in tableserver between hands / deals / etc
 1. All in is buggy, fix
 1. Add all in button
 1. Visualize winner after a hand with chip sliding animation

@@ -80,16 +80,16 @@ type (
 
 	// TableConfig define nuances of the game played at a Table
 	TableConfig struct {
-		minBet       int
-		defaultFunds int
+		MinBet       int
+		DefaultFunds int
 	}
 )
 
 // DefaultConfig creates a default TableConfig.
 func DefaultConfig() TableConfig {
 	return TableConfig{
-		minBet:       DefaultMinBet,
-		defaultFunds: DefaultFunds,
+		MinBet:       DefaultMinBet,
+		DefaultFunds: DefaultFunds,
 	}
 }
 
@@ -97,7 +97,7 @@ func DefaultConfig() TableConfig {
 func NewTable() *Table {
 	table := NewTableWithConfig(
 		TableConfig{
-			minBet: DefaultMinBet,
+			MinBet: DefaultMinBet,
 		},
 	)
 	return table
@@ -216,8 +216,8 @@ func (t *Table) Join(p *Player) error {
 	t.Standers[p.Name] = p
 	p.table = t
 	p.Standing = true
-	if p.Funds < t.TableConfig.defaultFunds {
-		p.Funds = t.TableConfig.defaultFunds
+	if p.Funds < t.TableConfig.DefaultFunds {
+		p.Funds = t.TableConfig.DefaultFunds
 	}
 	return nil
 }
@@ -228,8 +228,8 @@ func (t *Table) SitDown(p *Player, seat int) error {
 	defer t.mutex.Unlock()
 	if p.table == t && !p.Standing {
 		return fmt.Errorf("Player already sitting")
-	} else if p.Funds < t.TableConfig.minBet {
-		return fmt.Errorf("Player has insufficient funds to sit (%d < %d)", p.Funds, t.TableConfig.minBet)
+	} else if p.Funds < t.TableConfig.MinBet {
+		return fmt.Errorf("Player has insufficient funds to sit (%d < %d)", p.Funds, t.TableConfig.MinBet)
 	} else if seat >= MaxTableSize {
 		return errors.New("Seat, " + fmt.Sprint(seat) +
 			" is greater than max table size, " + fmt.Sprint(MaxTableSize))
@@ -309,7 +309,7 @@ func (p *Player) StandUp() {
 
 // AllIn returns true if the player is all in.
 func (p *Player) AllIn() bool {
-	return p.Funds <= 0 && p.BetAmount > 0
+	return p.Funds <= 0
 }
 
 // RoundDone gets whether the round is done

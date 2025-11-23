@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"sync"
 	"time"
 
@@ -33,6 +34,8 @@ const (
 
 	defaultTimeToBet        = time.Second * 30
 	defaultTimeBetweenHands = time.Second * 5
+	maxTimeBetweenHands     = time.Second * 15
+	defaultTimeBetweenDeals = time.Second * 2
 	maxConcurrentTables     = 10
 )
 
@@ -64,9 +67,10 @@ type (
 	}
 	// TableConfig defines the TableServer's opinion of how a given Table should be run.
 	TableConfig struct {
-		timeToBet        time.Duration
-		timeBetweenHands time.Duration
-		modelConfig      model.TableConfig
+		TimeToBet        time.Duration
+		TimeBetweenHands time.Duration
+		TimeBetweenDeals time.Duration
+		ModelConfig      model.TableConfig
 	}
 	// StateUpdate is an update to the table's state, for things that don't happen immediately or based
 	// on a clear user action.
@@ -92,6 +96,8 @@ type (
 		Board []poker.Card
 		// Winners is the result of the latest hand.
 		Winners []model.Winner
+		// TimeBetweenHands is the amount of time the server will take before starting the next hand.
+		TimeBetweenHands time.Duration
 		// RoundAction is the round action for the current better.
 		RoundAction model.RoundAction
 		// CurrentBetter is the player that made the round action.
@@ -198,9 +204,10 @@ type (
 
 func defaultTableConfig() TableConfig {
 	return TableConfig{
-		timeToBet:        defaultTimeToBet,
-		timeBetweenHands: defaultTimeBetweenHands,
-		modelConfig:      model.DefaultConfig(),
+		TimeToBet:        defaultTimeToBet,
+		TimeBetweenHands: defaultTimeBetweenHands,
+		TimeBetweenDeals: defaultTimeBetweenDeals,
+		ModelConfig:      model.DefaultConfig(),
 	}
 }
 
@@ -267,7 +274,7 @@ func (ts *TableServer) newTable(name string, config TableConfig, creator string)
 		return errors.New("duplicate name")
 	}
 	ts.tables[name] = &Table{
-		name: name, table: model.NewTableWithConfig(config.modelConfig),
+		name: name, table: model.NewTableWithConfig(config.ModelConfig),
 		adminName: creator, tableConfig: config,
 		pauseChan:   make(chan struct{}),
 		unpauseChan: make(chan struct{}),
@@ -586,14 +593,17 @@ func (t *Table) SerializableTable(p *Player) SerializableTable {
 	}
 }
 
-func (t *Table) sanitizeAction(action model.RoundAction) model.RoundAction {
-	if action.ActionType == model.Raise {
+func (t *Table) sanitizeAction(action model.RoundAction, player *Player) model.RoundAction {
+	switch action.ActionType {
+	case model.Raise:
 		if action.Bet == 0 {
 			action.ActionType = model.Check
 		} else if action.Bet == t.Hand().Round.CurrentBet {
 			action.ActionType = model.Call
 		}
 		return action
+	case model.AllIn:
+		action.Bet = player.playerModel.Funds + player.playerModel.BetAmount
 	}
 	return action
 }
@@ -647,13 +657,34 @@ func (t *Table) getBoard() []poker.Card {
 func (t *Table) getTimeToBet() time.Duration {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	return t.tableConfig.timeToBet
+	return t.tableConfig.TimeToBet
 }
 
-func (t *Table) getTimeBetweenHands() time.Duration {
+func (t *Table) getTimeBetweenHands(finalBetterCount int, winners []model.Winner) time.Duration {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	return t.tableConfig.timeBetweenHands
+	var totalPot int
+	var totalAllInners int
+	for _, w := range winners {
+		totalPot += w.Winnings
+		if w.Player.Funds == 0 {
+			totalAllInners++
+		}
+	}
+	multiplier := 1.0
+	// Increase wait time by 20% for every 2 final betters
+	multiplier *= max(1.0, math.Pow(1.2, float64(finalBetterCount/2)))
+	// Increase wait time by 20% for every DefaultFunds in the pot
+	multiplier *= max(1.0, math.Pow(1.02, float64(totalPot/(t.tableConfig.ModelConfig.DefaultFunds/10.0))))
+	// Increase wait time by 50% for every all in
+	multiplier *= max(1.0, math.Pow(1.5, float64(totalAllInners)))
+	return min(maxTimeBetweenHands, time.Duration(float64(t.tableConfig.TimeBetweenHands)*multiplier))
+}
+
+func (t *Table) getTimeBetweenDeals() time.Duration {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.tableConfig.TimeBetweenDeals
 }
 
 func (ts *TableServer) start(a TableAction) error {
@@ -709,6 +740,7 @@ func (ts *TableServer) serveTable(t *Table) error {
 		t.handlePause()
 		t.listenForPlayerActions()
 		for !t.table.HandDone() {
+			t.clock.sleep(t.getTimeBetweenDeals())
 			t.table.Deal()
 			t.sendPlayerUpdates(newDealUpdate(t.getBoard()))
 			t.listenForPlayerActions()
@@ -716,21 +748,22 @@ func (ts *TableServer) serveTable(t *Table) error {
 				t.table.SetHandDone(true)
 			}
 		}
-		winners, err := t.table.FinishHand()
+		winners, finalBetterCount, err := t.table.FinishHand()
 		if err != nil {
 			t.setPlaying(false)
 			log.Println(err)
 			return err
 		}
 		log.Println("hand over")
-		t.sendPlayerUpdates(newHandOverUpdate(winners))
+		timeBetweenHands := t.getTimeBetweenHands(finalBetterCount, winners)
+		t.sendPlayerUpdates(newHandOverUpdate(winners, timeBetweenHands, t))
 		standers := t.table.HandleStanders()
+		t.clock.sleep(timeBetweenHands)
 		for _, p := range standers {
 			a := StandTableAction(t.name, t.players[p])
 			t.sendPlayerUpdates(newTableUpdate(a))
 			t.sendPlayerUpdates(newStateUpdate(false, standers))
 		}
-		t.clock.sleep(t.getTimeBetweenHands())
 
 	}
 }
@@ -799,10 +832,12 @@ func newDealUpdate(board []poker.Card) *PlayerUpdate {
 	}
 }
 
-func newHandOverUpdate(winners []model.Winner) *PlayerUpdate {
+func newHandOverUpdate(winners []model.Winner, timeBetweenHands time.Duration, t *Table) *PlayerUpdate {
 	return &PlayerUpdate{
-		Type:    HandOverUpdateT,
-		Winners: winners,
+		Type:             HandOverUpdateT,
+		Winners:          winners,
+		TimeBetweenHands: timeBetweenHands,
+		CurrentFunds:     t.currentFunds(),
 	}
 }
 
@@ -938,7 +973,7 @@ func getPlayerAction(timeRemaining, elapsedTime time.Duration, player *Player, t
 			t.updatePaused(false)
 			n = t.clock.now()
 		case action = <-player.requestChan:
-			action = t.sanitizeAction(action)
+			action = t.sanitizeAction(action, player)
 			return action, elapsedTime + t.clock.now().Sub(n)
 		case <-afterChan:
 			log.Println(player.playerModel.Name, "timed out, folding")
