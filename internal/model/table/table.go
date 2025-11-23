@@ -341,11 +341,17 @@ func (t *Table) CurrentBetter() *Player {
 }
 
 // HandlePlayerAction handles a player's desired action
-func (t *Table) HandlePlayerAction(p *Player, action RoundAction) error {
+func (t *Table) HandlePlayerAction(p *Player, action RoundAction, handlePot bool) error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	return t.Hand.PlayerAction(p, action)
+	return t.Hand.PlayerAction(p, action, handlePot)
+}
 
+// FinishRound cleans up the round after betting is done
+func (t *Table) FinishRound() {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	t.Hand.createPots()
 }
 
 // String player's string

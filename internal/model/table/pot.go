@@ -25,7 +25,7 @@ func (hand *Hand) createPots() {
 		return
 	}
 	playersAscBet := []*Player{}
-	hand.Players.Do(func(p interface{}) {
+	hand.Players.Do(func(p any) {
 		if p.(*Player).BetAmount > 0 {
 			playersAscBet = append(playersAscBet, p.(*Player))
 		}
@@ -66,7 +66,7 @@ func (hand *Hand) getPlayerRanking() [][]*Player {
 	if hand.Players.Len() == 1 {
 		return [][]*Player{{RingToPlayer(hand.Players)}}
 	}
-	hand.Players.Do(func(p interface{}) {
+	hand.Players.Do(func(p any) {
 		player := p.(*Player)
 		player.HandRank = poker.Evaluate(append(hand.Board, player.Hole...))
 		pRank = append(pRank, player)

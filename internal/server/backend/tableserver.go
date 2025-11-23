@@ -877,7 +877,7 @@ func (t *Table) listenForPlayerActions() {
 		for !success {
 			client := t.players[player.Name]
 			a, elapsed := getPlayerAction(timeRemaining, elapsedTime, client, t)
-			err := t.table.HandlePlayerAction(player, a)
+			err := t.table.HandlePlayerAction(player, a, false)
 			elapsedTime = elapsed
 			if err == nil {
 				t.sendPlayerUpdates(t.newRoundUpdate(a, player, t.table.RoundDone(), t.table.Hand.RoundEndedWithFold, t.table.Hand.HandDone))
@@ -890,6 +890,7 @@ func (t *Table) listenForPlayerActions() {
 		log.Println(player.Name, "made their bet")
 	}
 	log.Println("Round of betting is done")
+	t.table.FinishRound()
 	t.table.SetRoundDone(true)
 }
 

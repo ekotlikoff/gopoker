@@ -64,8 +64,8 @@ func TestHeadsUp(t *testing.T) {
 	table.NewHand()
 	hand := table.Hand
 	fmt.Println(hand.StartHand())
-	table.Hand.PlayerAction(table.Players[0], RoundAction{Call, 200})
-	err := table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 200})
+	table.Hand.PlayerAction(table.Players[0], RoundAction{Call, 200}, true)
+	err := table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 200}, true)
 	if err != nil {
 		t.Error(err)
 	}
@@ -79,9 +79,9 @@ func TestBigBlindGetsToRaise(t *testing.T) {
 	table.NewHand()
 	hand := table.Hand
 	fmt.Println(hand.StartHand())
-	table.Hand.PlayerAction(table.Players[0], RoundAction{Call, 200})
-	table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 200})
-	err := table.Hand.PlayerAction(table.Players[3], RoundAction{Raise, 400})
+	table.Hand.PlayerAction(table.Players[0], RoundAction{Call, 200}, true)
+	table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 200}, true)
+	err := table.Hand.PlayerAction(table.Players[3], RoundAction{Raise, 400}, true)
 	if err != nil {
 		t.Error(err)
 	}
@@ -96,7 +96,7 @@ func TestAllInSmallBlind(t *testing.T) {
 	table.NewHand()
 	hand := table.Hand
 	fmt.Println(hand.StartHand())
-	table.Hand.PlayerAction(table.Players[0], RoundAction{Call, 200})
+	table.Hand.PlayerAction(table.Players[0], RoundAction{Call, 200}, true)
 	table.Hand.Deal()
 	table.Hand.Deal()
 	table.Hand.Deal()
@@ -120,8 +120,8 @@ func TestAllInCall(t *testing.T) {
 	table.SitDown(paul, 2)
 	table.NewHand()
 	fmt.Println(table.Hand.StartHand())
-	table.Hand.PlayerAction(table.Players[0], RoundAction{Raise, 400})
-	table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 400})
+	table.Hand.PlayerAction(table.Players[0], RoundAction{Raise, 400}, true)
+	table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 400}, true)
 	table.Hand.Deal()
 	table.Hand.Deal()
 	table.Hand.Deal()
@@ -146,13 +146,13 @@ func TestAllIn(t *testing.T) {
 	table.SitDown(paul, 2)
 	table.NewHand()
 	fmt.Println(table.Hand.StartHand())
-	table.Hand.PlayerAction(table.Players[0], RoundAction{Raise, 400})
-	table.Hand.PlayerAction(table.Players[2], RoundAction{AllIn, 600})
+	table.Hand.PlayerAction(table.Players[0], RoundAction{Raise, 400}, true)
+	table.Hand.PlayerAction(table.Players[2], RoundAction{AllIn, 600}, true)
 	err := table.Hand.Deal()
 	if err == nil {
 		t.Error(err)
 	}
-	table.Hand.PlayerAction(table.Players[0], RoundAction{Call, 600})
+	table.Hand.PlayerAction(table.Players[0], RoundAction{Call, 600}, true)
 	table.Hand.Deal()
 	table.Hand.Deal()
 	table.Hand.Deal()
@@ -177,7 +177,7 @@ func TestFoldWin(t *testing.T) {
 	table.SitDown(paul, 2)
 	table.NewHand()
 	table.Hand.StartHand()
-	err := table.Hand.PlayerAction(table.Players[0], RoundAction{Fold, 0})
+	err := table.Hand.PlayerAction(table.Players[0], RoundAction{Fold, 0}, true)
 	if err != nil {
 		t.Error(err)
 	}
@@ -201,7 +201,7 @@ func TestRematch(t *testing.T) {
 	table.SitDown(paul, 2)
 	table.NewHand()
 	fmt.Println(table.Hand.StartHand())
-	err := table.Hand.PlayerAction(table.Players[0], RoundAction{Fold, 0})
+	err := table.Hand.PlayerAction(table.Players[0], RoundAction{Fold, 0}, true)
 	if err != nil {
 		t.Error(err)
 	}
@@ -216,7 +216,7 @@ func TestRematch(t *testing.T) {
 	}
 	table.NewHand()
 	fmt.Println(table.Hand.StartHand())
-	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Fold, 0})
+	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Fold, 0}, true)
 	if err != nil {
 		t.Error(err)
 	}
@@ -246,16 +246,16 @@ func TestFold(t *testing.T) {
 	if table.Hand.Players.Len() != 3 {
 		t.Error("expected 3 players, got", table.Hand.Players.Len())
 	}
-	err := table.Hand.PlayerAction(table.Players[0], RoundAction{AllIn, 400})
+	err := table.Hand.PlayerAction(table.Players[0], RoundAction{AllIn, 400}, true)
 	if err != nil {
 		t.Error(err)
 	}
-	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Fold, 0})
+	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Fold, 0}, true)
 	if err != nil {
 		t.Log(table)
 		t.Error(err)
 	}
-	err = table.Hand.PlayerAction(table.Players[3], RoundAction{Fold, 0})
+	err = table.Hand.PlayerAction(table.Players[3], RoundAction{Fold, 0}, true)
 	if err != nil {
 		t.Log(table)
 		t.Error(err)
@@ -290,16 +290,16 @@ func TestFirstBetterFolds(t *testing.T) {
 	if table.Hand.Players.Len() != 3 {
 		t.Error("expected 3 players, got", table.Hand.Players.Len())
 	}
-	err := table.Hand.PlayerAction(table.Players[0], RoundAction{Fold, 0})
+	err := table.Hand.PlayerAction(table.Players[0], RoundAction{Fold, 0}, true)
 	if err != nil {
 		t.Error(err)
 	}
-	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 200})
+	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 200}, true)
 	if err != nil {
 		t.Log(table)
 		t.Error(err)
 	}
-	err = table.Hand.PlayerAction(table.Players[3], RoundAction{Call, 200})
+	err = table.Hand.PlayerAction(table.Players[3], RoundAction{Call, 200}, true)
 	if err != nil {
 		t.Log(table)
 		t.Error(err)
@@ -326,21 +326,21 @@ func TestRaiseAndCall(t *testing.T) {
 	if table.Hand.Players.Len() != 3 {
 		t.Error("expected 3 players, got", table.Hand.Players.Len())
 	}
-	err := table.Hand.PlayerAction(table.Players[0], RoundAction{Fold, 0})
+	err := table.Hand.PlayerAction(table.Players[0], RoundAction{Fold, 0}, true)
 	if err != nil {
 		t.Error(err)
 	}
-	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 200})
-	if err != nil {
-		t.Log(table)
-		t.Error(err)
-	}
-	err = table.Hand.PlayerAction(table.Players[3], RoundAction{Raise, 400})
+	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 200}, true)
 	if err != nil {
 		t.Log(table)
 		t.Error(err)
 	}
-	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 400})
+	err = table.Hand.PlayerAction(table.Players[3], RoundAction{Raise, 400}, true)
+	if err != nil {
+		t.Log(table)
+		t.Error(err)
+	}
+	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 400}, true)
 	if err != nil {
 		t.Log(table)
 		t.Error(err)
@@ -371,11 +371,11 @@ func TestNextDealer(t *testing.T) {
 	if table.Hand.Players.Len() != 3 {
 		t.Error("expected 3 players, got", table.Hand.Players.Len())
 	}
-	err := table.Hand.PlayerAction(leto, RoundAction{Fold, 0})
+	err := table.Hand.PlayerAction(leto, RoundAction{Fold, 0}, true)
 	if err != nil {
 		t.Error(err)
 	}
-	err = table.Hand.PlayerAction(paul, RoundAction{Fold, 0})
+	err = table.Hand.PlayerAction(paul, RoundAction{Fold, 0}, true)
 	if err != nil {
 		t.Error(err)
 	}

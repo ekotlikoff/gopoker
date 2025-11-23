@@ -370,9 +370,6 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 				c.logAction(fmt.Sprintf("%s checks.", update.PlayerUpdate.CurrentBetter))
 			case model.Call:
 				c.logAction(fmt.Sprintf("%s calls.", update.PlayerUpdate.CurrentBetter))
-				// TODO call as the final action in the round should be visualized as a bet in the UI
-				// probably will require sending out the current single RoundUpdate with all zero bets
-				// earlier before they're zeroed out.
 			case model.Raise:
 				c.logAction(fmt.Sprintf("%s raises to %d.", update.PlayerUpdate.CurrentBetter, action.Bet))
 				c.document.Call("getElementById", "current_bet_amount").Set("value", action.Bet)
@@ -381,7 +378,7 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 				c.document.Call("getElementById", "current_bet_amount").Set("value", action.Bet)
 			}
 			if update.PlayerUpdate.RoundDone && !update.PlayerUpdate.HandDone {
-				c.slideBetsToPot(update.PlayerUpdate.CurrentBets)
+				c.slideBetsToPot(update.PlayerUpdate)
 			} else if !update.PlayerUpdate.HandDone && update.PlayerUpdate.RoundAction.ActionType != model.Fold {
 				c.renderBets(update.PlayerUpdate.CurrentBets)
 			}
@@ -819,7 +816,8 @@ func (c *Client) slideBetToPot(seat int, currentBets []int) {
 	}), 1000)
 }
 
-func (c *Client) slideBetsToPot(currentBets []int) {
+func (c *Client) slideBetsToPot(update *tableserver.PlayerUpdate) {
+	c.renderBets(update.CurrentBets)
 	potChips := c.document.Call("getElementById", "pot_chips")
 	potRect := potChips.Call("getBoundingClientRect")
 	for i := 0; i < model.MaxTableSize; i++ {
@@ -829,7 +827,12 @@ func (c *Client) slideBetsToPot(currentBets []int) {
 		betEl.Get("style").Set("transform", fmt.Sprintf("translate(%dpx, %dpx)", potRect.Get("left").Int()-betRect.Get("left").Int(), potRect.Get("top").Int()-betRect.Get("top").Int()))
 	}
 	js.Global().Call("setTimeout", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		c.renderBets(currentBets)
+		c.renderBets(make([]int, model.MaxTableSize))
+		newPot := update.Pot
+		for _, bet := range update.CurrentBets {
+			newPot += bet
+		}
+		c.renderPot(newPot)
 		return nil
 	}), 1000)
 }

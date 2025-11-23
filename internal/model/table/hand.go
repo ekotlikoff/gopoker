@@ -241,7 +241,7 @@ func (hand *Hand) playerBet(player *Player, bet int) error {
 
 // PlayerAction handles a player action
 func (hand *Hand) PlayerAction(
-	player *Player, action RoundAction) error {
+	player *Player, action RoundAction, handlePots bool) error {
 	if hand.Round == nil {
 		return errors.New("playeraction: there is no round")
 	} else if RingToPlayer(hand.Round.BetTurn) != player || hand.Round.RoundDone {
@@ -270,7 +270,7 @@ func (hand *Hand) PlayerAction(
 	}
 	hand.checkForBettingCompletion()
 	hand.nextBetter()
-	if hand.Round.RoundDone {
+	if hand.Round.RoundDone && handlePots {
 		hand.createPots()
 	}
 	return nil
