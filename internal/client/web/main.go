@@ -352,6 +352,8 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 			if update.PlayerUpdate.CurrentBetter == c.player.Name {
 				c.document.Call("getElementById", "player_controls").Get("classList").Call("remove", "hidden")
 			}
+		case tableserver.PotUpdateT:
+			c.renderPot(update.PlayerUpdate.Pot)
 		case tableserver.TableUpdateT:
 			c.handleTableUpdate(update.PlayerUpdate.TableAction)
 		case tableserver.StateUpdateT:
@@ -377,7 +379,7 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 				c.logAction(fmt.Sprintf("%s is all in with %d.", update.PlayerUpdate.CurrentBetter, action.Bet))
 				c.document.Call("getElementById", "current_bet_amount").Set("value", action.Bet)
 			}
-			if update.PlayerUpdate.RoundDone && update.PlayerUpdate.RoundAction.ActionType != model.Fold {
+			if update.PlayerUpdate.RoundDone && (!update.PlayerUpdate.HandDone && update.PlayerUpdate.RoundAction.ActionType != model.Fold) {
 				c.slideBetsToPot(update.PlayerUpdate)
 			} else if !update.PlayerUpdate.HandDone && update.PlayerUpdate.RoundAction.ActionType != model.Fold {
 				c.renderBets(update.PlayerUpdate.CurrentBets)
@@ -388,18 +390,29 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 			c.renderCommunityCards(update.PlayerUpdate.Board)
 		case tableserver.HandOverUpdateT:
 			js.Global().Call("setTimeout", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-				for _, winner := range update.PlayerUpdate.Winners {
+				var slidBetsToWinner bool
+				winnerMap := make(map[string]int)
+				playerMap := make(map[string]model.Player)
+				for i, winner := range update.PlayerUpdate.Winners {
 					if winner.Winnings == 0 {
 						continue
 					}
-					if winner.Player.Hole != nil {
-						c.logAction(fmt.Sprintf("%s wins %d chips with %s.", winner.Player.Name, winner.Winnings, poker.RankString(winner.Player.HandRank)))
+					winnerMap[winner.Player.Name] += winner.Winnings
+					playerMap[winner.Player.Name] = winner.Player
+					if !slidBetsToWinner {
+						c.slideBetsToWinner(winner.Player.SeatIndex, make([]int, model.MaxTableSize))
+						slidBetsToWinner = true
+					}
+					c.slidePotToWinner(winner.Player.SeatIndex, i, update.PlayerUpdate.CurrentFunds)
+				}
+				for winner, winnings := range winnerMap {
+					winnerP := playerMap[winner]
+					if winnerP.Hole != nil {
+						c.logAction(fmt.Sprintf("%s wins %d chips with %s.", winner, winnings, poker.RankString(winnerP.HandRank)))
 					} else {
 						// Player did not show their cards.
-						c.logAction(fmt.Sprintf("%s wins %d chips.", winner.Player.Name, winner.Winnings))
+						c.logAction(fmt.Sprintf("%s wins %d chips.", winner, winnings))
 					}
-					c.slideBetsToWinner(winner.Player.SeatIndex, make([]int, model.MaxTableSize))
-					c.slidePotToWinner(winner.Player.SeatIndex, update.PlayerUpdate.CurrentFunds)
 				}
 				return nil
 			}), update.PlayerUpdate.TimeBetweenHands.Milliseconds()/3)
@@ -584,7 +597,7 @@ func (c *Client) handleStateUpdate(stateUpdate tableserver.StateUpdate) {
 			c.pauseGameButton.Get("classList").Call("add", "hidden")
 		}
 		c.removeDealerChip()
-		c.renderPot(0)
+		c.renderPot(model.Pot{})
 	}
 }
 
@@ -745,25 +758,30 @@ func (c *Client) renderHoleCards(cards []poker.Card) {
 	}
 }
 
-func (c *Client) renderPot(pot int) {
+func (c *Client) renderPot(pot model.Pot) {
 	potDiv := c.document.Call("getElementById", "pot")
-	potDiv.Set("textContent", "")
-	if pot > 0 {
-		potDiv.Set("textContent", fmt.Sprintf("$%d", pot))
-		potDiv.Get("style").Set("font-size", "0.7rem")
+	potDiv.Set("innerHTML", "")
+	for i, p := range append([]model.SubPot{pot.MainPot}, pot.SidePots...) {
+		c.renderPotChips(p.Pot, i)
 	}
-	c.renderPotChips(pot)
 }
 
-func (c *Client) renderPotChips(pot int) {
+func (c *Client) renderPotChips(pot int, potIndex int) {
+	if pot == 0 {
+		return
+	}
+	potDiv := c.document.Call("getElementById", "pot")
+	potChipsDiv := c.document.Call("createElement", "div")
+	potDiv.Call("appendChild", potChipsDiv)
+	potChipsDiv.Set("className", "pot-chips")
+	potChipsDiv.Set("textContent", fmt.Sprintf("$%d", pot))
+	potChipsDiv.Get("style").Set("font-size", "0.7rem")
 	chipValues := []int{10000, 1000, 500, 100, 25, 5, 1}
 	chipColors := []string{"brown", "yellow", "blue", "black", "green", "red", "white"}
 	chipsAdded := 0
 	maxChipHeight := 10
-	potChips := c.document.Call("getElementById", "pot_chips")
-	potChips.Set("innerHTML", "")
-	potChips.Get("style").Set("transition", "")
-	potChips.Get("style").Set("transform", "")
+	potChipsDiv.Get("style").Set("transition", "")
+	potChipsDiv.Get("style").Set("transform", "")
 	stackDiv := c.document.Call("createElement", "div")
 	for i, value := range chipValues {
 		count := pot / value
@@ -782,7 +800,7 @@ func (c *Client) renderPotChips(pot int) {
 			chipsAdded++
 			stackDiv.Call("appendChild", chip)
 			if chipsAdded%maxChipHeight == 0 {
-				potChips.Call("appendChild", stackDiv)
+				potChipsDiv.Call("appendChild", stackDiv)
 				stackDiv = c.document.Call("createElement", "div")
 			}
 		}
@@ -790,23 +808,25 @@ func (c *Client) renderPotChips(pot int) {
 			// Large value chips get their own stack
 			if chipsAdded%maxChipHeight > 0 {
 				chipsAdded += (maxChipHeight - (chipsAdded % maxChipHeight))
-				potChips.Call("appendChild", stackDiv)
+				potChipsDiv.Call("appendChild", stackDiv)
 				stackDiv = c.document.Call("createElement", "div")
 			}
 		}
 	}
 	if chipsAdded%maxChipHeight > 0 {
-		potChips.Call("appendChild", stackDiv)
+		potChipsDiv.Call("appendChild", stackDiv)
 	}
 }
 
-func (c *Client) slidePotToWinner(winnerSeat int, currentFunds []int) {
-	potChips := c.document.Call("getElementById", "pot_chips")
+func (c *Client) slidePotToWinner(winnerSeat int, potIndex int, currentFunds []int) {
+	potChips := c.document.Call("getElementsByClassName", "pot-chips")
 	winnerBetEl := c.document.Call("getElementById", fmt.Sprintf("player_bet_%d", winnerSeat))
 	winnerRect := winnerBetEl.Call("getBoundingClientRect")
-	potRect := potChips.Call("getBoundingClientRect")
-	potChips.Get("style").Set("transition", "all 1s ease-in-out")
-	potChips.Get("style").Set("transform", fmt.Sprintf("translate(%dpx, %dpx)", winnerRect.Get("left").Int()-potRect.Get("left").Int(), winnerRect.Get("top").Int()-potRect.Get("top").Int()))
+	// TODO need to fix pot indices in relation to server side model
+	chipsToSlide := potChips.Index(potIndex)
+	potRect := chipsToSlide.Call("getBoundingClientRect")
+	chipsToSlide.Get("style").Set("transition", "all 1s ease-in-out")
+	chipsToSlide.Get("style").Set("transform", fmt.Sprintf("translate(%dpx, %dpx)", winnerRect.Get("left").Int()-potRect.Get("left").Int(), winnerRect.Get("top").Int()-potRect.Get("top").Int()))
 	js.Global().Call("setTimeout", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		c.renderFunds(currentFunds)
 		return nil
@@ -814,7 +834,7 @@ func (c *Client) slidePotToWinner(winnerSeat int, currentFunds []int) {
 }
 
 func (c *Client) slideBetToPot(seat int, currentBets []int) {
-	potChips := c.document.Call("getElementById", "pot_chips")
+	potChips := c.document.Call("getElementById", "pot")
 	potRect := potChips.Call("getBoundingClientRect")
 	betEl := c.document.Call("getElementById", fmt.Sprintf("player_bet_%d", seat))
 	betRect := betEl.Call("getBoundingClientRect")
@@ -828,7 +848,7 @@ func (c *Client) slideBetToPot(seat int, currentBets []int) {
 
 func (c *Client) slideBetsToPot(update *tableserver.PlayerUpdate) {
 	c.renderBets(update.CurrentBets)
-	potChips := c.document.Call("getElementById", "pot_chips")
+	potChips := c.document.Call("getElementById", "pot")
 	potRect := potChips.Call("getBoundingClientRect")
 	for i := 0; i < model.MaxTableSize; i++ {
 		betEl := c.document.Call("getElementById", fmt.Sprintf("player_bet_%d", i))
@@ -838,11 +858,9 @@ func (c *Client) slideBetsToPot(update *tableserver.PlayerUpdate) {
 	}
 	js.Global().Call("setTimeout", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		c.renderBets(make([]int, model.MaxTableSize))
-		newPot := update.Pot
 		for _, bet := range update.CurrentBets {
-			newPot += bet
+			update.Pot.MainPot.Pot += bet
 		}
-		c.renderPot(newPot)
 		return nil
 	}), 1000)
 }

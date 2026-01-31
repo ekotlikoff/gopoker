@@ -49,6 +49,8 @@ const (
 	BetUpdateT
 	// DealUpdateT is the new set of community cards.
 	DealUpdateT
+	// PotUpdateT is the latest pot, divied up between potential side pots.
+	PotUpdateT
 	// HandOverUpdateT is the result of the latest hand.
 	HandOverUpdateT
 	// FullUpdateT is the full update including the entire table's state.
@@ -112,8 +114,8 @@ type (
 		CurrentBets []int
 		// CurrentFunds is the current funds for each player.
 		CurrentFunds []int
-		// Pot is the total pot in the hand.
-		Pot int
+		// Pot is the pot(s) in the hand.
+		Pot model.Pot
 		// RoundDone marks whether the round of betting is done or not.
 		RoundDone bool
 		// RoundEndedWithFold marks whether the round of betting ended with a fold or not.
@@ -740,6 +742,7 @@ func (ts *TableServer) serveTable(t *Table) error {
 		t.handlePause()
 		t.listenForPlayerActions()
 		for !t.table.HandDone() {
+			t.handlePause()
 			t.clock.sleep(t.getTimeBetweenDeals())
 			t.table.Deal()
 			t.sendPlayerUpdates(newDealUpdate(t.getBoard()))
@@ -819,7 +822,7 @@ func (t *Table) sendNewHandUpdates(bb int, d string) {
 				Dealer:       d,
 				CurrentBets:  t.currentBets(),
 				CurrentFunds: t.currentFunds(),
-				Pot:          t.Hand().Pot.MainPot.Pot,
+				Pot:          t.Hand().Pot,
 			}, &wg)
 	}
 	wg.Wait()
@@ -829,6 +832,13 @@ func newDealUpdate(board []poker.Card) *PlayerUpdate {
 	return &PlayerUpdate{
 		Type:  DealUpdateT,
 		Board: board,
+	}
+}
+
+func (t *Table) newPotUpdate(pot model.Pot) *PlayerUpdate {
+	return &PlayerUpdate{
+		Type: PotUpdateT,
+		Pot:  pot,
 	}
 }
 
@@ -889,7 +899,7 @@ func (t *Table) newRoundUpdate(a model.RoundAction, p *model.Player, roundDone, 
 		CurrentSeat:        p.SeatIndex,
 		CurrentBets:        t.currentBets(),
 		CurrentFunds:       t.currentFunds(),
-		Pot:                t.Hand().Pot.MainPot.Pot,
+		Pot:                t.Hand().Pot,
 		RoundDone:          roundDone,
 		RoundEndedWithFold: roundEndedWithFold,
 		HandDone:           handDone,
@@ -926,6 +936,7 @@ func (t *Table) listenForPlayerActions() {
 	}
 	log.Println("Round of betting is done")
 	t.table.FinishRound()
+	t.sendPlayerUpdates(t.newPotUpdate(t.Hand().Pot))
 	t.table.SetRoundDone(true)
 }
 
@@ -1025,6 +1036,8 @@ func (u PlayerUpdateType) String() string {
 		return "BetUpdateT"
 	case HandOverUpdateT:
 		return "HandOverUpdateT"
+	case PotUpdateT:
+		return "PotUpdateT"
 	default:
 		return "Unknown"
 	}

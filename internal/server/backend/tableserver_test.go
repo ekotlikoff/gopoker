@@ -196,6 +196,8 @@ func TestSimpleHand(t *testing.T) {
 	if update.CurrentBetter != p1.playerModel.Name {
 		t.Errorf("expected p1, got %s", update.CurrentBetter)
 	}
+	checkForUpdate(t, p1, PotUpdateT)
+	checkForUpdate(t, p2, PotUpdateT)
 	checkForUpdate(t, p1, DealUpdateT)
 	checkForUpdate(t, p2, DealUpdateT)
 	checkForUpdate(t, p1, BetUpdateT)
@@ -225,6 +227,8 @@ func TestSimpleHand(t *testing.T) {
 	checkRoundResponse(t, p2, false)
 	checkForUpdate(t, p1, RoundUpdateT)
 	checkForUpdate(t, p2, RoundUpdateT)
+	checkForUpdate(t, p1, PotUpdateT)
+	checkForUpdate(t, p2, PotUpdateT)
 	checkForUpdate(t, p1, DealUpdateT)
 	checkForUpdate(t, p2, DealUpdateT)
 	checkForUpdate(t, p1, BetUpdateT)
@@ -244,6 +248,8 @@ func TestSimpleHand(t *testing.T) {
 	checkRoundResponse(t, p2, false)
 	checkForUpdate(t, p1, RoundUpdateT)
 	checkForUpdate(t, p2, RoundUpdateT)
+	checkForUpdate(t, p1, PotUpdateT)
+	checkForUpdate(t, p2, PotUpdateT)
 	checkForUpdate(t, p1, DealUpdateT)
 	checkForUpdate(t, p2, DealUpdateT)
 	checkForUpdate(t, p1, BetUpdateT)
@@ -266,6 +272,8 @@ func TestSimpleHand(t *testing.T) {
 	checkRoundResponse(t, p2, false)
 	checkForUpdate(t, p1, RoundUpdateT)
 	checkForUpdate(t, p2, RoundUpdateT)
+	checkForUpdate(t, p1, PotUpdateT)
+	checkForUpdate(t, p2, PotUpdateT)
 	checkForUpdate(t, p1, HandOverUpdateT)
 	checkForUpdate(t, p2, HandOverUpdateT)
 	checkForUpdate(t, p1, TableUpdateT)
@@ -325,12 +333,20 @@ func TestAllIn(t *testing.T) {
 	if update.CurrentBetter != p1.playerModel.Name {
 		t.Errorf("expected p1, got %s", update.CurrentBetter)
 	}
+	checkForUpdate(t, p1, PotUpdateT)
+	checkForUpdate(t, p2, PotUpdateT)
 	checkForUpdate(t, p1, DealUpdateT)
 	checkForUpdate(t, p2, DealUpdateT)
+	checkForUpdate(t, p1, PotUpdateT)
+	checkForUpdate(t, p2, PotUpdateT)
 	checkForUpdate(t, p1, DealUpdateT)
 	checkForUpdate(t, p2, DealUpdateT)
+	checkForUpdate(t, p1, PotUpdateT)
+	checkForUpdate(t, p2, PotUpdateT)
 	checkForUpdate(t, p1, DealUpdateT)
 	checkForUpdate(t, p2, DealUpdateT)
+	checkForUpdate(t, p1, PotUpdateT)
+	checkForUpdate(t, p2, PotUpdateT)
 	checkForUpdate(t, p1, HandOverUpdateT)
 	checkForUpdate(t, p2, HandOverUpdateT)
 }
@@ -363,6 +379,8 @@ func TestTimeoutMidBet(t *testing.T) {
 		t.Errorf("expected timeout fold, got: %s", u)
 	}
 	checkRoundResponse(t, p1, false)
+	checkForUpdate(t, p1, PotUpdateT)
+	checkForUpdate(t, p2, PotUpdateT)
 	checkForUpdate(t, p1, HandOverUpdateT)
 	checkForUpdate(t, p2, HandOverUpdateT)
 	checkForUpdate(t, p1, NewHandUpdateT)
@@ -416,6 +434,7 @@ func TestPauseMidBet(t *testing.T) {
 	if update.CurrentBetter != p1.playerModel.Name {
 		t.Errorf("expected p1, got %s", update.CurrentBetter)
 	}
+	checkForUpdate(t, p1, PotUpdateT)
 	checkForUpdate(t, p1, DealUpdateT)
 }
 
