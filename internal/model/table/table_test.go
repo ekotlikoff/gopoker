@@ -393,3 +393,128 @@ func TestNextDealer(t *testing.T) {
 		t.Errorf("expected Paul as the better, got %s", table.Dealer().Name)
 	}
 }
+
+func TestSidePot(t *testing.T) {
+	table := NewTableWithConfig(TableConfig{
+		MinBet: 100,
+	})
+	anna := NewPlayerWithFunds("Anna", 1000)
+	table.SitDown(anna, 0)
+	joe := NewPlayerWithFunds("Joe", 1500)
+	table.SitDown(joe, 2)
+	bob := NewPlayerWithFunds("Bob", 500)
+	table.SitDown(bob, 4)
+
+	table.NewHand()
+	err := table.Hand.StartHand()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Pre-flop
+	if err := table.Hand.PlayerAction(anna, RoundAction{Call, 200}, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := table.Hand.PlayerAction(joe, RoundAction{Call, 200}, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := table.Hand.PlayerAction(bob, RoundAction{AllIn, 500}, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := table.Hand.PlayerAction(anna, RoundAction{Call, 500}, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := table.Hand.PlayerAction(joe, RoundAction{Call, 500}, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := table.Hand.Deal(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Post-flop
+	if err := table.Hand.PlayerAction(joe, RoundAction{Raise, 200}, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := table.Hand.PlayerAction(anna, RoundAction{Call, 200}, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(table.Hand.Pot.SidePots) != 1 {
+		t.Fatalf("expected 1 side pot, got %d", len(table.Hand.Pot.SidePots))
+	}
+}
+
+func TestSidePotAfterFirstRound(t *testing.T) {
+	table := NewTableWithConfig(TableConfig{
+		MinBet: 100,
+	})
+	anna := NewPlayerWithFunds("Anna", 1000)
+	table.SitDown(anna, 0)
+	joe := NewPlayerWithFunds("Joe", 300)
+	table.SitDown(joe, 2)
+	bob := NewPlayerWithFunds("Bob", 1500)
+	table.SitDown(bob, 4)
+
+	table.NewHand()
+	err := table.Hand.StartHand()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Pre-flop
+	// UTG is anna
+	// Small blind is Joe
+	// Big blind is bob
+
+	// Anna calls
+	if err := table.Hand.PlayerAction(anna, RoundAction{Call, 200}, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Joe goes all-in for 300
+	if err := table.Hand.PlayerAction(joe, RoundAction{AllIn, 300}, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bob calls 300
+	if err := table.Hand.PlayerAction(bob, RoundAction{Call, 300}, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Anna calls 300
+	if err := table.Hand.PlayerAction(anna, RoundAction{Call, 300}, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(table.Hand.Pot.SidePots) != 1 {
+		t.Fatalf("expected 1 side pot, got %d", len(table.Hand.Pot.SidePots))
+	}
+
+	if table.Hand.Pot.SidePots[0].Pot != 900 {
+		t.Errorf("expected side pot to be 900, got %d", table.Hand.Pot.SidePots[0].Pot)
+	}
+	if len(table.Hand.Pot.SidePots[0].Players) != 3 {
+		t.Errorf("expected 3 players in side pot, got %d", len(table.Hand.Pot.SidePots[0].Players))
+	}
+	_, ok := table.Hand.Pot.SidePots[0].Players["Anna"]
+	if !ok {
+		t.Errorf("expected Anna in side pot")
+	}
+	_, ok = table.Hand.Pot.SidePots[0].Players["Joe"]
+	if !ok {
+		t.Errorf("expected Joe in side pot")
+	}
+	_, ok = table.Hand.Pot.SidePots[0].Players["Bob"]
+	if !ok {
+		t.Errorf("expected Bob in side pot")
+	}
+
+	if table.Hand.Pot.MainPot.Pot != 0 {
+		t.Errorf("expected main pot to be 0, got %d", table.Hand.Pot.MainPot.Pot)
+	}
+	if len(table.Hand.Pot.MainPot.Players) != 0 {
+		t.Errorf("expected 0 players in main pot, got %d", len(table.Hand.Pot.MainPot.Players))
+	}
+}

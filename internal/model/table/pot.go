@@ -33,12 +33,10 @@ func (hand *Hand) createPots() {
 	sort.Slice(playersAscBet, func(i, j int) bool {
 		return playersAscBet[i].BetAmount < playersAscBet[j].BetAmount
 	})
-	bet := hand.Round.CurrentBet
 	for i, player := range playersAscBet {
-		if player.BetAmount < bet {
+		if player.AllIn() && player.BetAmount > 0 {
 			hand.createSidePot(player, playersAscBet, i)
-			bet = hand.Round.CurrentBet - player.BetAmount
-		} else {
+		} else if player.BetAmount > 0 {
 			hand.Pot.MainPot.Pot += player.BetAmount
 			hand.Pot.MainPot.Players[player.Name] = struct{}{}
 		}
@@ -92,7 +90,10 @@ func (hand *Hand) getPlayerRanking() [][]*Player {
 
 func (hand *Hand) distributePots(playerRanking [][]*Player) []Winner {
 	var out []Winner
-	for _, pot := range append(hand.Pot.SidePots, hand.Pot.MainPot) {
+	for _, pot := range append([]SubPot{hand.Pot.MainPot}, hand.Pot.SidePots...) {
+		if pot.Pot <= 0 {
+			continue
+		}
 		for _, pRanking := range playerRanking {
 			winners := []*Player{}
 			for _, p := range pRanking {
