@@ -427,7 +427,7 @@ func (hand *Hand) String() string {
 				", player_count=" + fmt.Sprint(len(pot.Players)) + "\n"
 		}
 	}
-	hand.Players.Do(func(v interface{}) {
+	hand.Players.Do(func(v any) {
 		p := v.(*Player)
 		out += fmt.Sprint(p)
 		if hand.Round != nil && p == RingToPlayer(hand.Round.BetTurn) {

@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -535,5 +535,5 @@ func prometheusMiddleware(handler http.Handler) http.HandlerFunc {
 
 // SetQuiet logging
 func SetQuiet() {
-	log.SetOutput(ioutil.Discard)
+	log.SetOutput(io.Discard)
 }
