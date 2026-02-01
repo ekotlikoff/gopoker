@@ -83,7 +83,7 @@ func (ts *TableServer) handleTableAction(action *PlayerAction) {
 				"", fmt.Sprintf("Table %s not found.", a.TableName))
 			return
 		}
-		if table.playing {
+		if !table.paused {
 			action.From.SendTableResponse(
 				"", "Cannot set chip count while table is playing.")
 			return
@@ -181,54 +181,202 @@ This comprehensive testing strategy will ensure that the new feature is working 
 
 ## 3. Frontend Changes
 
-The frontend will be updated to allow the admin to modify a player's chip count.
+The frontend will be updated to allow the admin to modify a player's chip count. This will be done using a modal window.
 
-### 3.1 `internal/client/web/main.go`
+### 3.1 `internal/server/frontend/static/index.html`
 
-This file contains the client-side logic. We will modify the `renderFullTable` function to add an onclick handler to each player's name.
+This file will be updated to include the HTML for the chip count modal.
 
-#### 3.1.1 Update `renderFullTable`
+#### 3.1.1 Add Chip Count Modal HTML
 
-The `renderFullTable` function will be updated to add a click event listener to each player's name element. This event listener will only be added if the current player is the admin and the table is paused. When a player's name is clicked, a new `setChipCount` function will be called.
+The following HTML will be added to the `body` of the `index.html` file.
 
-```go
-// in internal/client/web/main.go
-func (c *Client) renderFullTable(table tableserver.SerializableTable) {
-	// ... existing code
-	if player != nil {
-		playerName.Set("textContent", player.Name)
-		if c.player.Name == table.AdminName && table.Paused {
-			playerName.Set("onclick", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-				c.setChipCount(player.Name)
-				return nil
-			}))
-			playerName.Get("style").Set("cursor", "pointer")
-		}
-// ... existing code
+```html
+<!-- in internal/server/frontend/static/index.html -->
+<div id="chip_count_modal" class="modal hidden">
+    <div class="modal-content">
+        <span class="close-button">&times;</span>
+        <h2>Set Chip Count for <span id="modal_player_name"></span></h2>
+        <input type="number" id="new_chip_count_input" />
+        <button id="set_chip_count_button">Set</button>
+    </div>
+</div>
+```
+
+#### 3.1.2 Add Modal CSS
+
+The following CSS will be added to the `<style>` section of the `index.html` file.
+
+```css
+/* in internal/server/frontend/static/index.html */
+.modal {
+    position: fixed;
+    z-index: 1;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.4);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 400px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.close-button {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.close-button:hover,
+.close-button:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
 }
 ```
 
-#### 3.1.2 New `setChipCount` function
+### 3.2 `internal/client/web/main.go`
 
-A new function `setChipCount` will be added to the `Client` struct. This function will prompt the admin for a new chip count and then send a `SetChipCount` action to the server.
+This file contains the client-side logic. We will modify the `onMessage` function to add an onclick handler to each player's name when the table is paused.
+
+#### 3.2.1 Update `Client` struct
+
+A new field will be added to the `Client` struct to hold a reference to the modal element.
+
+```go
+// in internal/client/web/main.go
+type Client struct {
+    // ... existing fields
+    chipCountModal js.Value
+}
+```
+
+#### 3.2.2 Update `makeClient`
+
+The `makeClient` function will be updated to get a reference to the modal element.
+
+```go
+// in internal/client/web/main.go
+func makeClient() *Client {
+    // ... existing code
+    return &Client{
+        // ... existing fields
+        chipCountModal: d.Call("getElementById", "chip_count_modal"),
+    }
+}
+```
+
+#### 3.2.3 Update `onMessage` function
+
+The `onMessage` function will be updated to handle `Pause` and `Unpause` `TableActionResponseT`. When a `Pause` action is received, an `onclick` handler will be added to each player's name. When an `Unpause` action is received, the `onclick` handler will be removed.
+
+```go
+// in internal/client/web/main.go
+func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
+    // ... existing code
+	case gateway.TableActionResponseT:
+		if update.TableActionResponse.Err != "" {
+			log.Println("error", update.TableActionResponse.TableAction.TableActionType)
+			// TODO: display error to user
+			return nil
+		}
+		switch update.TableActionResponse.TableAction.TableActionType {
+        // ... existing code
+		case tableserver.Unpause:
+			c.pauseGameButton.Get("classList").Call("remove", "hidden")
+			c.unpauseGameButton.Get("classList").Call("add", "hidden")
+            if c.player.Name == c.table.AdminName {
+                for i, p := range c.table.Table.Players {
+                    if p != nil {
+                        seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
+                        playerNameEl := seat.Call("querySelector", ".player_name")
+                        playerNameEl.Set("onclick", js.Undefined())
+                        playerNameEl.Get("style").Set("cursor", "default")
+                    }
+                }
+            }
+		case tableserver.Pause:
+			c.pauseGameButton.Get("classList").Call("add", "hidden")
+			c.unpauseGameButton.Get("classList").Call("remove", "hidden")
+            if c.player.Name == c.table.AdminName {
+                for i, p := range c.table.Table.Players {
+                    if p != nil {
+                        seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
+                        playerNameEl := seat.Call("querySelector", ".player_name")
+                        playerNameEl.Set("onclick", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+                            c.showChipCountModal(p.Name)
+                            return nil
+                        }))
+                        playerNameEl.Get("style").Set("cursor", "pointer")
+                    }
+                }
+            }
+        // ... existing code
+		}
+    // ... existing code
+}
+```
+
+#### 3.2.4 New `showChipCountModal` and `hideChipCountModal` functions
+
+New functions `showChipCountModal` and `hideChipCountModal` will be added to the `Client` struct to control the visibility of the modal.
+
+```go
+// in internal/client/web/main.go
+func (c *Client) showChipCountModal(playerName string) {
+	c.document.Call("getElementById", "modal_player_name").Set("textContent", playerName)
+	c.chipCountModal.Get("classList").Call("remove", "hidden")
+
+	closeButton := c.chipCountModal.Call("querySelector", ".close-button")
+	closeButton.Set("onclick", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		c.hideChipCountModal()
+		return nil
+	}))
+
+	setButton := c.chipCountModal.Call("querySelector", "#set_chip_count_button")
+	setButton.Set("onclick", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		c.setChipCount(playerName)
+		return nil
+	}))
+}
+
+func (c *Client) hideChipCountModal() {
+	c.chipCountModal.Get("classList").Call("add", "hidden")
+}
+```
+
+#### 3.2.5 Update `setChipCount` function
+
+The `setChipCount` function will be updated to get the new chip amount from the modal's input field and then send a `SetChipCount` action to the server.
 
 ```go
 // in internal/client/web/main.go
 func (c *Client) setChipCount(playerName string) {
-	newAmountStr := js.Global().Call("prompt", fmt.Sprintf("Enter new chip count for %s", playerName), "").String()
-	if newAmountStr == "" {
-		return
-	}
+	newAmountStr := c.document.Call("getElementById", "new_chip_count_input").Get("value").String()
+	c.document.Call("getElementById", "new_chip_count_input").Set("value", "")
 	newAmount, err := strconv.Atoi(newAmountStr)
 	if err != nil {
 		log.Printf("Invalid amount: %s", newAmountStr)
+        c.hideChipCountModal()
 		return
 	}
 	c.send(gateway.PlayerRequest{Type: gateway.TableActionT, TableAction: tableserver.TableAction{TableActionType: tableserver.SetChipCount, TableName: c.table.Name, PlayerName: playerName, Amount: newAmount}})
+	c.hideChipCountModal()
 }
 ```
 
-#### 3.1.3 Update `handleTableUpdate`
+#### 3.2.6 Update `handleTableUpdate`
 
 The `handleTableUpdate` function will be updated to handle the `SetChipCount` action. When a `SetChipCount` action is received, the player's funds will be updated in the UI.
 

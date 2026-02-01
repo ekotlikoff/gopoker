@@ -64,6 +64,7 @@ type Client struct {
 	betTimeRemaining  time.Duration
 	betTimeElapsed    time.Duration
 	betTimeLastUpdate time.Time
+	chipCountModal    js.Value
 	mutex             sync.Mutex
 }
 
@@ -90,6 +91,7 @@ func makeClient() *Client {
 		betButton:         d.Call("getElementById", "bet_button"),
 		foldButton:        d.Call("getElementById", "fold_button"),
 		allInButton:       d.Call("getElementById", "all_in_button"),
+		chipCountModal:    d.Call("getElementById", "chip_count_modal"),
 	}
 }
 
@@ -419,7 +421,7 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 		}
 	case gateway.TableActionResponseT:
 		if update.TableActionResponse.Err != "" {
-			log.Println("error", update.TableActionResponse.TableAction.TableActionType)
+			log.Println("TableActionResponse error", update.TableActionResponse.TableAction.TableActionType)
 			// TODO: display error to user
 			return nil
 		}
@@ -448,9 +450,33 @@ func (c *Client) onMessage(this js.Value, args []js.Value) interface{} {
 		case tableserver.Unpause:
 			c.pauseGameButton.Get("classList").Call("remove", "hidden")
 			c.unpauseGameButton.Get("classList").Call("add", "hidden")
+			if c.player.Name == c.table.AdminName {
+				for i, p := range c.table.Table.Players {
+					if p != nil {
+						seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
+						playerNameEl := seat.Call("querySelector", ".player_name")
+						playerNameEl.Set("onclick", js.Undefined())
+						playerNameEl.Get("style").Set("cursor", "default")
+					}
+				}
+			}
 		case tableserver.Pause:
 			c.pauseGameButton.Get("classList").Call("add", "hidden")
 			c.unpauseGameButton.Get("classList").Call("remove", "hidden")
+			if c.player.Name == c.table.AdminName {
+				for i, p := range c.table.Table.Players {
+					if p != nil {
+						seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
+						pName := p.Name
+						playerNameEl := seat.Call("querySelector", ".player_name")
+						playerNameEl.Set("onclick", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+							c.showChipCountModal(pName)
+							return nil
+						}))
+						playerNameEl.Get("style").Set("cursor", "pointer")
+					}
+				}
+			}
 		case tableserver.Start:
 			c.pauseGameButton.Get("classList").Call("remove", "hidden")
 			c.startGameButton.Get("classList").Call("add", "hidden")
@@ -557,6 +583,7 @@ func (c *Client) handleTableUpdate(action tableserver.TableAction) {
 		playerName := seat.Call("querySelector", ".player_name")
 		playerName.Set("textContent", action.PlayerName)
 		seat.Call("querySelector", ".sit_down_button").Get("classList").Call("add", "hidden")
+		c.table.Table.Players[action.Seat] = model.NewPlayer(action.PlayerName)
 	case tableserver.Stand:
 		// TODO hide the standing... UI
 		if action.PlayerName == c.player.Name {
@@ -583,6 +610,21 @@ func (c *Client) handleTableUpdate(action tableserver.TableAction) {
 		c.clearBetTimerLoop()
 	case tableserver.Unpause:
 		// TODO remove UI showing pause
+	case tableserver.SetChipCount:
+		c.logAction(fmt.Sprintf("Admin updated chip count for %s to %d.", action.PlayerName, action.Amount))
+		for i, p := range c.table.Table.Players {
+			if p != nil && p.Name == action.PlayerName {
+				c.table.Table.Players[i].Funds = action.Amount
+				seat := c.document.Call("getElementById", fmt.Sprintf("seat_%d", i))
+				chipsDiv := seat.Call("querySelector", ".player_funds")
+				if action.Amount > 0 {
+					chipsDiv.Set("textContent", fmt.Sprintf("$%d", action.Amount))
+				} else {
+					chipsDiv.Set("textContent", "")
+				}
+				break
+			}
+		}
 	}
 }
 
@@ -611,6 +653,7 @@ func (c *Client) removePlayer(s int, showButton bool) {
 	if showButton {
 		sitButton.Get("classList").Call("remove", "hidden")
 	}
+	c.table.Table.Players[s] = nil
 }
 
 func (c *Client) renderFullTable(table tableserver.SerializableTable) {
@@ -627,6 +670,13 @@ func (c *Client) renderFullTable(table tableserver.SerializableTable) {
 
 		if player != nil {
 			playerName.Set("textContent", player.Name)
+			if c.player != nil && c.player.Name == table.AdminName && table.Paused {
+				playerName.Set("onclick", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+					c.showChipCountModal(player.Name)
+					return nil
+				}))
+				playerName.Get("style").Set("cursor", "pointer")
+			}
 			sitButton.Get("classList").Call("add", "hidden")
 			if c.player != nil && c.player.Name == player.Name {
 				c.sitting = true
@@ -693,6 +743,40 @@ func (c *Client) send(action interface{}) {
 
 func (c *Client) sit(seat int) {
 	c.send(gateway.PlayerRequest{Type: gateway.TableActionT, TableAction: tableserver.TableAction{TableActionType: tableserver.Sit, TableName: c.table.Name, Seat: seat}})
+}
+
+func (c *Client) setChipCount(playerName string) {
+	newAmountStr := c.document.Call("getElementById", "new_chip_count_input").Get("value").String()
+	c.document.Call("getElementById", "new_chip_count_input").Set("value", "")
+	newAmount, err := strconv.Atoi(newAmountStr)
+	if err != nil {
+		log.Printf("Invalid amount: %s", newAmountStr)
+		c.hideChipCountModal()
+		return
+	}
+	c.send(gateway.PlayerRequest{Type: gateway.TableActionT, TableAction: tableserver.TableAction{TableActionType: tableserver.SetChipCount, TableName: c.table.Name, PlayerName: playerName, Amount: newAmount}})
+	c.hideChipCountModal()
+}
+
+func (c *Client) showChipCountModal(playerName string) {
+	c.document.Call("getElementById", "modal_player_name").Set("textContent", playerName)
+	c.chipCountModal.Get("classList").Call("remove", "hidden")
+
+	closeButton := c.chipCountModal.Call("querySelector", ".close-button")
+	closeButton.Set("onclick", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		c.hideChipCountModal()
+		return nil
+	}))
+
+	setButton := c.chipCountModal.Call("querySelector", "#set_chip_count_button")
+	setButton.Set("onclick", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		c.setChipCount(playerName)
+		return nil
+	}))
+}
+
+func (c *Client) hideChipCountModal() {
+	c.chipCountModal.Get("classList").Call("add", "hidden")
 }
 
 func (c *Client) stand(this js.Value, args []js.Value) interface{} {

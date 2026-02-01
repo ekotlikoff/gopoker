@@ -1,7 +1,6 @@
 ## TODO
 
 #### Must have
-1. Admin able to change chip counts during pause
 1. Show winner's cards (if applicable, not if they win on a fold)
 1. Show cards on all-in
 
@@ -11,6 +10,7 @@
 1. Add ability to configure table when creating
 
 ## Done
+1. Admin able to change chip counts during pause
 1. Visualize side pots
 1. Call as final bet in round should be visualized better
 1. Add configurable delay in tableserver between hands / deals / etc

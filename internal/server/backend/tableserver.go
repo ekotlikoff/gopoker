@@ -456,8 +456,8 @@ func (ts *TableServer) Serve() {
 			table, ok := ts.tables[a.TableName]
 			if !ok {
 				err = fmt.Errorf("table %s not found", a.TableName)
-			} else if table.playing {
-				err = fmt.Errorf("cannot set chip count while table is playing")
+			} else if !table.paused {
+				err = fmt.Errorf("cannot set chip count while table is unpaused")
 			} else if table.adminName != a.player.playerModel.Name {
 				err = fmt.Errorf("only the admin can set chip counts")
 			} else if a.Amount < 0 {
@@ -778,7 +778,7 @@ func (ts *TableServer) serveTable(t *Table) error {
 			log.Print(err)
 			return err
 		}
-		log.Println("new hand started")
+		log.Println("serveTable: new hand started")
 		t.sendNewHandUpdates(t.bigBlindAmount(), t.dealer())
 		t.handlePause()
 		t.listenForPlayerActions()
@@ -798,7 +798,7 @@ func (ts *TableServer) serveTable(t *Table) error {
 			log.Println(err)
 			return err
 		}
-		log.Println("hand over")
+		log.Println("serveTable: hand over")
 		timeBetweenHands := t.getTimeBetweenHands(finalBetterCount, winners)
 		t.sendPlayerUpdates(newHandOverUpdate(winners, timeBetweenHands, t))
 		standers := t.table.HandleStanders()
