@@ -11,6 +11,7 @@
 1. Add ability to configure table when creating
 
 ## Done
+1. Visualize side pots
 1. Call as final bet in round should be visualized better
 1. Add configurable delay in tableserver between hands / deals / etc
 1. All in is buggy, fix
