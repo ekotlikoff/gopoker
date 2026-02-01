@@ -31,6 +31,8 @@ const (
 	Unpause
 	// Refresh is a request for full state, for example after a browser refresh.
 	Refresh
+	// SetChipCount is the admin's setting of a player's chips.
+	SetChipCount
 
 	defaultTimeToBet        = time.Second * 30
 	defaultTimeBetweenHands = time.Second * 5
@@ -184,11 +186,12 @@ type (
 
 	// TableAction is a player's request to the table outside the scope of a given round.
 	TableAction struct {
-		TableActionType TableActionType
-		TableName       string
-		Seat            int
-		TableConfig     TableConfig
-		PlayerName      string
+		TableActionType TableActionType `json:"tableActionType"`
+		TableName       string          `json:"tableName,omitempty"`
+		Seat            int             `json:"seat,omitempty"`
+		TableConfig     TableConfig     `json:"tableConfig,omitempty"`
+		PlayerName      string          `json:"playerName,omitempty"`
+		Amount          int             `json:"amount,omitempty"`
 		player          *Player
 	}
 
@@ -359,6 +362,17 @@ func UnpauseTableAction(t string, p *Player) TableAction {
 	}
 }
 
+// SetChipCountTableAction sets a player's chip count.
+func SetChipCountTableAction(t string, p *Player, playerName string, amount int) TableAction {
+	return TableAction{
+		TableActionType: SetChipCount,
+		TableName:       t,
+		PlayerName:      playerName,
+		Amount:          amount,
+		player:          p,
+	}
+}
+
 // Serve starts the table server
 func (ts *TableServer) Serve() {
 	for a := range ts.tableActions {
@@ -437,6 +451,33 @@ func (ts *TableServer) Serve() {
 		case Unpause:
 			a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
 			ts.tables[a.TableName].unpauseChan <- struct{}{}
+		case SetChipCount:
+			ts.mutex.Lock()
+			table, ok := ts.tables[a.TableName]
+			if !ok {
+				err = fmt.Errorf("table %s not found", a.TableName)
+			} else if table.playing {
+				err = fmt.Errorf("cannot set chip count while table is playing")
+			} else if table.adminName != a.player.playerModel.Name {
+				err = fmt.Errorf("only the admin can set chip counts")
+			} else if a.Amount < 0 {
+				err = fmt.Errorf("chip count cannot be negative")
+			} else {
+				var targetPlayer *Player
+				for _, p := range table.players {
+					if p.playerModel.Name == a.PlayerName {
+						targetPlayer = p
+						break
+					}
+				}
+				if targetPlayer == nil {
+					err = fmt.Errorf("player %s not found", a.PlayerName)
+				} else {
+					targetPlayer.playerModel.Funds = a.Amount
+					table.broadcast(newTableUpdate(a))
+				}
+			}
+			ts.mutex.Unlock()
 		case Refresh:
 			// TODO
 			log.Fatalf("not implemented")
@@ -939,6 +980,20 @@ func (t *Table) listenForPlayerActions() {
 	t.table.SetRoundDone(true)
 }
 
+func (t *Table) broadcast(update *PlayerUpdate) {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	for _, p := range t.players {
+		select {
+		case p.TableUpdateChan <- update:
+		case <-t.clock.after(1 * time.Second):
+			// Log the error and continue to the next player.
+			// This prevents a slow client from blocking the entire table.
+			log.Printf("Warning: player %s update channel is full. Discarding update.", p.playerModel.Name)
+		}
+	}
+}
+
 func (t *Table) sendPlayerUpdates(u *PlayerUpdate) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -1062,6 +1117,8 @@ func (t TableActionType) String() string {
 		return "Unpause"
 	case Refresh:
 		return "Refresh"
+	case SetChipCount:
+		return "SetChipCount"
 	default:
 		return "Unknown"
 	}
