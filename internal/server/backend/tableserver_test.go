@@ -440,16 +440,45 @@ func TestPauseMidBet(t *testing.T) {
 
 func TestSetChipCount(t *testing.T) {
 	tableName := "test table"
+	newAmount := 1234
 	ts, p1, p2 := createTableWithTwoPlayers(tableName)
 
+	ts.SendTableAction(SetChipCountTableAction(tableName, p1, p2.GetName(), newAmount))
+	if r := p1.GetTableResponse(); r.Err == "" {
+		t.Error("expected an error when setting chip count before table is started")
+	}
+
+	ts.SendTableAction(StartTableAction(tableName, p1))
+	p1.GetTableResponse()
+	checkForUpdate(t, p1, TableUpdateT)
+	checkForUpdate(t, p2, TableUpdateT)
+	checkForUpdate(t, p1, NewHandUpdateT)
+	checkForUpdate(t, p2, NewHandUpdateT)
+	table := ts.tables[tableName]
+	if !table.playing {
+		t.Error("table should be playing")
+	}
+	checkForUpdate(t, p2, BetUpdateT)
+	checkForUpdate(t, p1, BetUpdateT)
+
+	ts.SendTableAction(SetChipCountTableAction(tableName, p1, p2.GetName(), newAmount))
+	if r := p1.GetTableResponse(); r.Err == "" {
+		t.Error("expected an error when setting chip count when unpaused")
+	}
+	ts.SendTableAction(PauseTableAction(tableName, p1))
+	checkForUpdate(t, p1, TableUpdateT)
+	checkForUpdate(t, p2, TableUpdateT)
+	if p1.GetTableResponse().Err != "" {
+		t.Error("expected to pause table successfully")
+	}
 	// Fail to set chip count as non-admin.
-	ts.SendTableAction(SetChipCountTableAction(tableName, p2, p1.GetName(), 1234))
+	ts.SendTableAction(SetChipCountTableAction(tableName, p2, p1.GetName(), newAmount))
 	if r := p2.GetTableResponse(); r.Err == "" {
 		t.Error("expected an error when non-admin sets chip count")
 	}
 
 	// Fail to set chip count for a user not at the table.
-	ts.SendTableAction(SetChipCountTableAction(tableName, p1, "fakePlayer", 1234))
+	ts.SendTableAction(SetChipCountTableAction(tableName, p1, "fakePlayer", newAmount))
 	if r := p1.GetTableResponse(); r.Err == "" {
 		t.Error("expected an error when setting chip count of fake player")
 	}
@@ -461,7 +490,6 @@ func TestSetChipCount(t *testing.T) {
 	}
 
 	// Successfully set the chip count.
-	newAmount := 1234
 	ts.SendTableAction(SetChipCountTableAction(tableName, p1, p2.GetName(), newAmount))
 	if r := p1.GetTableResponse(); r.Err != "" {
 		t.Errorf("expected to successfully set chip count, got %s", r.Err)
@@ -482,18 +510,6 @@ func TestSetChipCount(t *testing.T) {
 	}
 	if p2.playerModel.Funds != newAmount {
 		t.Errorf("expected player funds to be %d, got %d", newAmount, p2.playerModel.Funds)
-	}
-
-	// Fail to set chip count while table is playing.
-	ts.SendTableAction(StartTableAction(tableName, p1))
-	p1.GetTableResponse()
-	checkForUpdate(t, p1, TableUpdateT)
-	checkForUpdate(t, p2, TableUpdateT)
-	checkForUpdate(t, p1, NewHandUpdateT)
-	checkForUpdate(t, p2, NewHandUpdateT)
-	ts.SendTableAction(SetChipCountTableAction(tableName, p1, p2.GetName(), newAmount))
-	if r := p1.GetTableResponse(); r.Err == "" {
-		t.Error("expected an error when setting chip count while table is playing")
 	}
 }
 
