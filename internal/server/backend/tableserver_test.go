@@ -472,7 +472,7 @@ func checkRoundResponse(t *testing.T, p *Player, expectErr bool) *RoundActionRes
 		}
 		return &r
 	case <-time.After(time.Second):
-		t.Fail()
+		t.Fatal("Timeout in checkRoundResponse")
 		return nil
 	}
 }

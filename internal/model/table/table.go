@@ -316,6 +316,7 @@ func (p *Player) AllIn() bool {
 func (t *Table) RoundDone() bool {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
+	t.Hand.checkForBettingCompletion()
 	return t.Hand.Round.RoundDone
 }
 

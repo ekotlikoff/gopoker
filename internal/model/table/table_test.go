@@ -275,6 +275,52 @@ func TestFold(t *testing.T) {
 	table.NewHand()
 }
 
+func TestOneBetterOnMainPot(t *testing.T) {
+	table := NewTableWithConfig(TableConfig{
+		MinBet: DefaultMinBet,
+	})
+	leto := NewPlayerWithFunds("Leto", 400)
+	table.SitDown(leto, 0)
+	paul := NewPlayerWithFunds("Paul", 600)
+	table.SitDown(paul, 2)
+	frank := NewPlayerWithFunds("Frank", 600)
+	table.SitDown(frank, 3)
+	table.NewHand()
+	table.Hand.StartHand()
+	if table.Hand.Players.Len() != 3 {
+		t.Error("expected 3 players, got", table.Hand.Players.Len())
+	}
+	err := table.Hand.PlayerAction(table.Players[0], RoundAction{AllIn, 400}, true)
+	if err != nil {
+		t.Error(err)
+	}
+	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Call, 400}, true)
+	if err != nil {
+		t.Log(table)
+		t.Error(err)
+	}
+	err = table.Hand.PlayerAction(table.Players[3], RoundAction{Call, 400}, true)
+	if err != nil {
+		t.Log(table)
+		t.Error(err)
+	}
+	err = table.Hand.Deal()
+	if err != nil {
+		t.Log(table)
+		t.Error(err)
+	}
+	err = table.Hand.PlayerAction(table.Players[2], RoundAction{Fold, 0}, true)
+	if err != nil {
+		t.Log(table)
+		t.Error(err)
+	}
+	err = table.Hand.PlayerAction(table.Players[3], RoundAction{Raise, 200}, true)
+	if err == nil {
+		t.Error("Expected bet to fail, since there is only one better remaining on the main pot")
+		t.Log(table)
+	}
+}
+
 func TestFirstBetterFolds(t *testing.T) {
 	table := NewTableWithConfig(TableConfig{
 		MinBet: DefaultMinBet,
@@ -513,8 +559,5 @@ func TestSidePotAfterFirstRound(t *testing.T) {
 
 	if table.Hand.Pot.MainPot.Pot != 0 {
 		t.Errorf("expected main pot to be 0, got %d", table.Hand.Pot.MainPot.Pot)
-	}
-	if len(table.Hand.Pot.MainPot.Players) != 0 {
-		t.Errorf("expected 0 players in main pot, got %d", len(table.Hand.Pot.MainPot.Players))
 	}
 }

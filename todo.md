@@ -4,9 +4,6 @@
 1. Admin able to change chip counts during pause
 1. Show winner's cards (if applicable, not if they win on a fold)
 1. Show cards on all-in
-1. Visualize multiple pots during all in side pot situations
-  * This is in progress, maybe some bugs to fix RE sliding the side pots to the right place
-1. When all 2 players betting and 1 is all in, 2 players with a pot can both fold and last mainpot will have no players assigned to it. Should not consider the last player a valid next better.
 
 #### Nice to have
 1. Support custom player avatars w/ nano banana or similar

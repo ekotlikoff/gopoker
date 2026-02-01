@@ -932,7 +932,6 @@ func (t *Table) listenForPlayerActions() {
 			}
 			client.responseChan <- RoundActionResponse{errorToString(err)}
 		}
-		log.Println(player.Name, "made their bet")
 	}
 	log.Println("Round of betting is done")
 	t.table.FinishRound()

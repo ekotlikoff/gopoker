@@ -83,6 +83,9 @@ func (t *Table) NewHand() error {
 		}
 	}
 	players, pot := t.playersForHand()
+	if players.Len() < MinPlayersToPlay {
+		return fmt.Errorf("starthand: insufficient players (%d) to create hand", players.Len())
+	}
 	t.Hand = &Hand{
 		Deck:        poker.Deck{},
 		TableConfig: t.TableConfig,
@@ -245,6 +248,8 @@ func (hand *Hand) PlayerAction(
 	player *Player, action RoundAction, handlePots bool) error {
 	if hand.Round == nil {
 		return errors.New("playeraction: there is no round")
+	} else if hand.Round.RoundDone {
+		return errors.New("playeraction: the round is done")
 	} else if RingToPlayer(hand.Round.BetTurn) != player || hand.Round.RoundDone {
 		return errors.New("playeraction: it's not your turn to bet")
 	}
@@ -283,6 +288,10 @@ func (hand *Hand) checkForBettingCompletion() {
 		hand.HandDone = true
 		hand.Round.RoundDone = true
 		hand.RoundEndedWithFold = true
+	} else if len(hand.Pot.MainPot.Players) == 1 {
+		// If there is only one player remaining on the main pot, betting is over right now
+		hand.BettingDone = true
+		hand.Round.RoundDone = true
 	} else if hand.BetterCount() <= 1 {
 		// If there is only 1 player left betting dealing must continue
 		hand.BettingDone = true

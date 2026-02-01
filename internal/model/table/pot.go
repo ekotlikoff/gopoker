@@ -42,6 +42,12 @@ func (hand *Hand) createPots() {
 		}
 		player.BetAmount = 0
 	}
+	hand.Players.Do(func(p any) {
+		player := p.(*Player)
+		if !player.AllIn() {
+			hand.Pot.MainPot.Players[player.Name] = struct{}{}
+		}
+	})
 	hand.Round.CurrentBet = 0
 }
 
