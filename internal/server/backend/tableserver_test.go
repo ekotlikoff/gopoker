@@ -39,462 +39,348 @@ func (m *mockTime) stepTime(d time.Duration) {
 }
 
 func TestCreateAndJoin(t *testing.T) {
-	tableName := "test table"
-	ts := NewTableServerWithTime(&mockTime{})
-	go ts.Serve()
-	p1 := NewPlayer("1")
-	p2 := NewPlayer("2")
-	ts.SendTableAction(CreateTableAction(tableName, p1))
-	if p1.GetTableResponse().Err != "" {
-		t.Error("expected to create table successfully")
-	}
-	if _, ok := ts.tables[tableName]; !ok {
+	c := NewTestClient(t)
+	p1 := c.NewPlayer("p1", 1000)
+	p2 := c.NewPlayer("p2", 1000)
+
+	c.CreateTable(p1, "test")
+	c.JoinTable(p1, "test", false)
+	c.JoinTable(p2, "test", false)
+
+	if _, ok := c.ts.tables["test"]; !ok {
 		t.Error("expected table to be created")
 	}
-	if ts.tables[tableName].adminName != p1.playerModel.Name {
+	if c.ts.tables["test"].adminName != p1.playerModel.Name {
 		t.Error("expected creator to be admin")
 	}
-	ts.SendTableAction(JoinTableAction(tableName, p1))
-	if p1.GetTableResponse().Err != "" {
-		t.Error("expected to join table successfully")
-	}
-	if p1.table != ts.tables[tableName] {
+	if p1.table != c.ts.tables["test"] {
 		t.Error("p1's table is not set after joining")
 	}
-	ts.SendTableAction(JoinTableAction(tableName, p2))
-	if p2.GetTableResponse().Err != "" {
-		t.Error("expected to join table successfully")
-	}
-	if p2.table != ts.tables[tableName] {
+	if p2.table != c.ts.tables["test"] {
 		t.Error("p2's table is not set after joining")
 	}
-	if len(ts.tables[tableName].players) != 2 {
-		t.Errorf("len(ts.tables[tableName].players) == %d, expected 2", len(ts.tables[tableName].players))
+	if len(c.ts.tables["test"].players) != 2 {
+		t.Errorf("len(c.ts.tables[\"test\"].players) == %d, expected 2", len(c.ts.tables["test"].players))
 	}
 }
 
 func TestJoinFakeTable(t *testing.T) {
-	tableName := "test table"
-	ts := NewTableServerWithTime(&mockTime{})
-	go ts.Serve()
-	p1 := NewPlayer("1")
-	p2 := NewPlayer("2")
-	ts.SendTableAction(CreateTableAction(tableName, p1))
-	if p1.GetTableResponse().Err != "" {
-		t.Error("expected to create table successfully")
-	}
-	ts.SendTableAction(JoinTableAction("fake table", p2))
-	if p2.GetTableResponse().Err == "" {
-		t.Error("expected to fail to join table")
-	}
-	ts.SendTableAction(JoinTableAction(tableName, p2))
-	if p2.GetTableResponse().Err != "" {
-		t.Error("expected to join table successfully")
-	}
+	c := NewTestClient(t)
+	p1 := c.NewPlayer("p1", 1000)
+	p2 := c.NewPlayer("p2", 1000)
+
+	c.CreateTable(p1, "test")
+
+	c.JoinTable(p2, "fake table", true)
+	c.JoinTable(p2, "test", false)
 }
 
 func TestSit(t *testing.T) {
-	tableName := "test table"
-	ts := NewTableServerWithTime(&mockTime{})
-	go ts.Serve()
-	p1 := NewPlayer("1")
-	p2 := NewPlayer("2")
-	p1.playerModel.Funds = 1000
-	p2.playerModel.Funds = 1000
-	ts.SendTableAction(CreateTableAction(tableName, p1))
-	p1.GetTableResponse()
-	ts.SendTableAction(JoinTableAction(tableName, p2))
-	p2.GetTableResponse()
+	c := NewTestClient(t)
+	p1 := c.NewPlayer("p1", 1000)
+	p2 := c.NewPlayer("p2", 1000)
+
+	c.CreateTable(p1, "test")
+	c.JoinTable(p1, "test", false)
+	c.JoinTable(p2, "test", false)
+	c.DrainUpdates(p1)
+	c.DrainUpdates(p2)
+
 	p1Seat := 0
-	ts.SendTableAction(SitTableAction(tableName, p1, p1Seat))
-	if err := p1.GetTableResponse().Err; err != "" {
-		t.Errorf("expected to sit at table successfully, failed with error: %s", err)
-	}
-	seat := 99
-	ts.SendTableAction(SitTableAction(tableName, p2, seat))
-	if p2.GetTableResponse().Err == "" {
-		t.Errorf("expected not to sit at seat %d successfully", seat)
-	}
-	ts.SendTableAction(SitTableAction(tableName, p2, p1Seat))
-	if p2.GetTableResponse().Err == "" {
-		t.Errorf("expected not to sit at seat %d successfully", seat)
-	}
-	ts.SendTableAction(SitTableAction(tableName, p2, 3))
-	if err := p2.GetTableResponse().Err; err != "" {
-		t.Errorf("expected to sit successfully, failed with error: %s", err)
-	}
-}
-
-func consumeTableUpdates(ps ...*Player) {
-	for _, p := range ps {
-		<-p.TableUpdateChan
-	}
-}
-
-func createTableWithTwoPlayers(tableName string) (*TableServer, *Player, *Player) {
-	ts := NewTableServerWithTime(&mockTime{})
-	go ts.Serve()
-	p1 := NewPlayer("1")
-	p2 := NewPlayer("2")
-	ps := []*Player{p1, p2}
-	p1.playerModel.Funds = 1000
-	p2.playerModel.Funds = 1000
-	ts.SendTableAction(CreateTableAction(tableName, p1))
-	p1.GetTableResponse()
-	ts.SendTableAction(JoinTableAction(tableName, p1))
-	consumeTableUpdates(p1)
-	p1.GetTableResponse()
-	ts.SendTableAction(JoinTableAction(tableName, p2))
-	consumeTableUpdates(ps...)
-	p2.GetTableResponse()
-	ts.SendTableAction(SitTableAction(tableName, p1, 2))
-	consumeTableUpdates(ps...)
-	p1.GetTableResponse()
-	ts.SendTableAction(SitTableAction(tableName, p2, 1))
-	consumeTableUpdates(ps...)
-	p2.GetTableResponse()
-	return ts, p1, p2
+	c.Sit(p1, p1Seat, false)
+	c.Sit(p2, 99, true)
+	c.Sit(p2, p1Seat, true)
+	c.Sit(p2, 3, false)
 }
 
 func TestSimpleHand(t *testing.T) {
-	tableName := "test table"
-	ts, p1, p2 := createTableWithTwoPlayers(tableName)
-	ts.SendTableAction(StartTableAction(tableName, p2))
-	if r := p2.GetTableResponse(); r.Err == "" {
-		t.Error("only the admin should be able to start the table")
-	}
-	ts.SendTableAction(StartTableAction(tableName, p1))
-	if r := p1.GetTableResponse(); r.Err != "" {
-		t.Error("the admin should be able to start the table")
-	}
-	checkForUpdate(t, p1, TableUpdateT)
-	checkForUpdate(t, p2, TableUpdateT)
-	checkForUpdate(t, p1, NewHandUpdateT)
-	u := checkForUpdate(t, p2, NewHandUpdateT)
+	c := NewTestClient(t)
+	p1, p2 := c.createTableWithTwoPlayers("test")
+
+	c.StartTable(p2, true)
+	c.StartTable(p1, false)
+
+	c.AssertUpdate(p1, NewHandUpdateT)
+	u := c.AssertUpdate(p2, NewHandUpdateT)
 	if u.Hole == nil {
 		t.Errorf("expected player hand provided in NewHandUpdateT, u.Hole == nil")
 	}
-	table := ts.tables[tableName]
+
+	table := c.ts.tables["test"]
 	if !table.playing {
 		t.Error("table should be playing")
 	}
 	if table.dealer() != p2.playerModel.Name {
 		t.Errorf("dealer should be '%v', got '%v'", p2.playerModel.Name, table.dealer())
 	}
-	checkForUpdate(t, p2, BetUpdateT)
-	checkForUpdate(t, p1, BetUpdateT)
-	sendRoundActionWithTimeout(t, p2, model.RoundAction{ActionType: model.Call})
-	checkRoundResponse(t, p2, false)
-	checkForUpdate(t, p1, RoundUpdateT)
-	checkForUpdate(t, p2, RoundUpdateT)
-	checkForUpdate(t, p1, BetUpdateT)
-	checkForUpdate(t, p2, BetUpdateT)
-	sendRoundActionWithTimeout(t, p1, model.RoundAction{ActionType: model.Call})
-	checkRoundResponse(t, p1, false)
-	checkForUpdate(t, p2, RoundUpdateT)
-	update := checkForUpdate(t, p1, RoundUpdateT)
+	c.AssertUpdate(p2, BetUpdateT)
+	c.AssertUpdate(p1, BetUpdateT)
+
+	c.SendAction(p2, model.RoundAction{ActionType: model.Call})
+	c.AssertUpdate(p1, RoundUpdateT)
+	c.AssertUpdate(p2, RoundUpdateT)
+	c.AssertUpdate(p1, BetUpdateT)
+	c.AssertUpdate(p2, BetUpdateT)
+	c.SendAction(p1, model.RoundAction{ActionType: model.Call})
+	c.AssertUpdate(p2, RoundUpdateT)
+	update := c.AssertUpdate(p1, RoundUpdateT)
 	if update.CurrentBetter != p1.playerModel.Name {
 		t.Errorf("expected p1, got %s", update.CurrentBetter)
 	}
-	checkForUpdate(t, p1, PotUpdateT)
-	checkForUpdate(t, p2, PotUpdateT)
-	checkForUpdate(t, p1, DealUpdateT)
-	checkForUpdate(t, p2, DealUpdateT)
-	checkForUpdate(t, p1, BetUpdateT)
-	checkForUpdate(t, p2, BetUpdateT)
+
+	c.AssertUpdate(p1, PotUpdateT)
+	c.AssertUpdate(p2, PotUpdateT)
+	c.AssertUpdate(p1, DealUpdateT)
+	c.AssertUpdate(p2, DealUpdateT)
+	c.AssertUpdate(p1, BetUpdateT)
+	c.AssertUpdate(p2, BetUpdateT)
 	if len(table.table.Board()) != 3 {
 		t.Errorf("expected the flop, len(table.table.Board())==%d", len(table.table.Board()))
 	}
-	ts.SendTableAction(StandTableAction(tableName, p1))
-	if r := p1.GetTableResponse(); r.Err != "" {
-		t.Errorf("expected a successful stand, got error: %s", r.Err)
-	}
-	if !p1.playerModel.WantToStandUp {
+	c.Stand(p1)
+	if !p1.WantsToStandUp() {
 		t.Error("p1 should want to stand up")
 	}
-	ts.SendTableAction(StandTableAction(tableName, p2))
-	p2.GetTableResponse()
-	sendRoundActionWithTimeout(t, p1, model.RoundAction{ActionType: model.Call})
-	if r := p1.GetRoundResponse(); r.Err != "" {
-		t.Errorf("expected a successful bet, got error: %s", r.Err)
-	}
-	checkForUpdate(t, p1, RoundUpdateT)
-	checkForUpdate(t, p2, RoundUpdateT)
-	checkForUpdate(t, p2, BetUpdateT)
-	checkForUpdate(t, p1, BetUpdateT)
-	// // TODO add timeouts for the server's SendRoundResponse
-	sendRoundActionWithTimeout(t, p2, model.RoundAction{ActionType: model.Call})
-	checkRoundResponse(t, p2, false)
-	checkForUpdate(t, p1, RoundUpdateT)
-	checkForUpdate(t, p2, RoundUpdateT)
-	checkForUpdate(t, p1, PotUpdateT)
-	checkForUpdate(t, p2, PotUpdateT)
-	checkForUpdate(t, p1, DealUpdateT)
-	checkForUpdate(t, p2, DealUpdateT)
-	checkForUpdate(t, p1, BetUpdateT)
-	checkForUpdate(t, p2, BetUpdateT)
+	c.Stand(p2)
+	c.SendAction(p1, model.RoundAction{ActionType: model.Call})
+	c.AssertUpdate(p1, RoundUpdateT)
+	c.AssertUpdate(p2, RoundUpdateT)
+	c.AssertUpdate(p2, BetUpdateT)
+	c.AssertUpdate(p1, BetUpdateT)
+
+	c.SendAction(p2, model.RoundAction{ActionType: model.Call})
+	c.AssertUpdate(p1, RoundUpdateT)
+	c.AssertUpdate(p2, RoundUpdateT)
+	c.AssertUpdate(p1, PotUpdateT)
+	c.AssertUpdate(p2, PotUpdateT)
+	c.AssertUpdate(p1, DealUpdateT)
+	c.AssertUpdate(p2, DealUpdateT)
+	c.AssertUpdate(p1, BetUpdateT)
+	c.AssertUpdate(p2, BetUpdateT)
 	if len(table.table.Board()) != 4 {
 		t.Errorf("len(table.table.Board())==%d, want 4", len(table.table.Board()))
 	}
-	sendRoundActionWithTimeout(t, p1, model.RoundAction{ActionType: model.Call})
-	if r := p1.GetRoundResponse(); r.Err != "" {
-		t.Errorf("expected a successful bet, got error: %s", r.Err)
-	}
-	checkForUpdate(t, p1, RoundUpdateT)
-	checkForUpdate(t, p2, RoundUpdateT)
-	checkForUpdate(t, p2, BetUpdateT)
-	checkForUpdate(t, p1, BetUpdateT)
-	sendRoundActionWithTimeout(t, p2, model.RoundAction{ActionType: model.Call})
-	checkRoundResponse(t, p2, false)
-	checkForUpdate(t, p1, RoundUpdateT)
-	checkForUpdate(t, p2, RoundUpdateT)
-	checkForUpdate(t, p1, PotUpdateT)
-	checkForUpdate(t, p2, PotUpdateT)
-	checkForUpdate(t, p1, DealUpdateT)
-	checkForUpdate(t, p2, DealUpdateT)
-	checkForUpdate(t, p1, BetUpdateT)
-	checkForUpdate(t, p2, BetUpdateT)
+
+	c.SendAction(p1, model.RoundAction{ActionType: model.Call})
+	c.AssertUpdate(p1, RoundUpdateT)
+	c.AssertUpdate(p2, RoundUpdateT)
+	c.AssertUpdate(p2, BetUpdateT)
+	c.AssertUpdate(p1, BetUpdateT)
+
+	c.SendAction(p2, model.RoundAction{ActionType: model.Call})
+	c.AssertUpdate(p1, RoundUpdateT)
+	c.AssertUpdate(p2, RoundUpdateT)
+	c.AssertUpdate(p1, PotUpdateT)
+	c.AssertUpdate(p2, PotUpdateT)
+	c.AssertUpdate(p1, DealUpdateT)
+	c.AssertUpdate(p2, DealUpdateT)
+	c.AssertUpdate(p1, BetUpdateT)
+	c.AssertUpdate(p2, BetUpdateT)
 	if len(table.table.Board()) != 5 {
 		t.Errorf("len(table.table.Board())==%d, want 5", len(table.table.Board()))
 	}
-	sendRoundActionWithTimeout(t, p1, model.RoundAction{ActionType: model.Call})
-	if r := p1.GetRoundResponse(); r.Err != "" {
-		t.Errorf("expected a successful bet, got error: %s", r.Err)
-	}
-	checkForUpdate(t, p1, RoundUpdateT)
-	checkForUpdate(t, p2, RoundUpdateT)
-	checkForUpdate(t, p2, BetUpdateT)
-	checkForUpdate(t, p1, BetUpdateT)
-	sendRoundActionWithTimeout(t, p2, model.RoundAction{ActionType: model.Call})
+	c.SendAction(p1, model.RoundAction{ActionType: model.Call})
+	c.AssertUpdate(p1, RoundUpdateT)
+	c.AssertUpdate(p2, RoundUpdateT)
+	c.AssertUpdate(p2, BetUpdateT)
+	c.AssertUpdate(p1, BetUpdateT)
+
+	c.SendAction(p2, model.RoundAction{ActionType: model.Call})
 	if !p1.playerModel.WantToStandUp {
 		t.Error("p1 should want to stand up")
 	}
-	checkRoundResponse(t, p2, false)
-	checkForUpdate(t, p1, RoundUpdateT)
-	checkForUpdate(t, p2, RoundUpdateT)
-	checkForUpdate(t, p1, PotUpdateT)
-	checkForUpdate(t, p2, PotUpdateT)
-	checkForUpdate(t, p1, HandOverUpdateT)
-	checkForUpdate(t, p2, HandOverUpdateT)
-	checkForUpdate(t, p1, TableUpdateT)
-	update = checkForUpdate(t, p2, TableUpdateT)
-	if update.TableAction.TableActionType != Stand {
-		t.Errorf("expected stand update, got %v", update.TableAction.TableActionType)
+	c.AssertUpdate(p1, RoundUpdateT)
+	c.AssertUpdate(p2, RoundUpdateT)
+	c.AssertUpdate(p1, PotUpdateT)
+	c.AssertUpdate(p2, PotUpdateT)
+	c.AssertUpdate(p1, HandOverUpdateT)
+	c.AssertUpdate(p2, HandOverUpdateT)
+	c.AssertUpdate(p1, TableUpdateT)
+	update2 := c.AssertUpdate(p2, TableUpdateT)
+	if update2.TableAction.TableActionType != Stand {
+		t.Errorf("expected stand update, got %v", update2.TableAction.TableActionType)
 	}
-	update = checkForUpdate(t, p2, StateUpdateT)
-	if len(update.StateUpdate.NowStanding) != 2 {
-		t.Errorf("expected two standers, got %d", len(update.StateUpdate.NowStanding))
+	update3 := c.AssertUpdate(p2, StateUpdateT)
+	if len(update3.StateUpdate.NowStanding) != 2 {
+		t.Errorf("expected two standers, got %d", len(update3.StateUpdate.NowStanding))
 	}
-	checkForUpdate(t, p2, TableUpdateT)
-	checkForUpdate(t, p2, StateUpdateT)
-	update = <-p2.TableUpdateChan
-	if !update.StateUpdate.PlayStopped {
+	c.AssertUpdate(p2, TableUpdateT)
+	c.AssertUpdate(p2, StateUpdateT)
+	update4 := <-p2.TableUpdateChan
+	if !update4.StateUpdate.PlayStopped {
 		t.Error("expected play to stop after standing")
 	}
 }
 
 func TestAllIn(t *testing.T) {
-	tableName := "test table"
-	ts, p1, p2 := createTableWithTwoPlayers(tableName)
-	ts.SendTableAction(StartTableAction(tableName, p2))
-	if r := p2.GetTableResponse(); r.Err == "" {
-		t.Error("only the admin should be able to start the table")
-	}
-	ts.SendTableAction(StartTableAction(tableName, p1))
-	if r := p1.GetTableResponse(); r.Err != "" {
-		t.Error("the admin should be able to start the table")
-	}
-	checkForUpdate(t, p1, TableUpdateT)
-	checkForUpdate(t, p2, TableUpdateT)
-	checkForUpdate(t, p1, NewHandUpdateT)
-	u := checkForUpdate(t, p2, NewHandUpdateT)
+	c := NewTestClient(t)
+	p1, p2 := c.createTableWithTwoPlayers("test")
+
+	c.StartTable(p2, true)
+	c.StartTable(p1, false)
+
+	c.AssertUpdate(p1, NewHandUpdateT)
+	u := c.AssertUpdate(p2, NewHandUpdateT)
 	if u.Hole == nil {
 		t.Errorf("expected player hand provided in NewHandUpdateT, u.Hole == nil")
 	}
-	table := ts.tables[tableName]
+	table := c.ts.tables["test"]
 	if !table.playing {
 		t.Error("table should be playing")
 	}
 	if table.dealer() != p2.playerModel.Name {
 		t.Errorf("dealer should be '%v', got '%v'", p2.playerModel.Name, table.dealer())
 	}
-	checkForUpdate(t, p2, BetUpdateT)
-	checkForUpdate(t, p1, BetUpdateT)
-	sendRoundActionWithTimeout(t, p2, model.RoundAction{ActionType: model.AllIn})
-	checkRoundResponse(t, p2, false)
-	checkForUpdate(t, p1, RoundUpdateT)
-	checkForUpdate(t, p2, RoundUpdateT)
-	checkForUpdate(t, p1, BetUpdateT)
-	checkForUpdate(t, p2, BetUpdateT)
-	sendRoundActionWithTimeout(t, p1, model.RoundAction{ActionType: model.AllIn})
-	checkRoundResponse(t, p1, false)
-	checkForUpdate(t, p2, RoundUpdateT)
-	update := checkForUpdate(t, p1, RoundUpdateT)
+	c.AssertUpdate(p2, BetUpdateT)
+	c.AssertUpdate(p1, BetUpdateT)
+	c.SendAction(p2, model.RoundAction{ActionType: model.AllIn})
+	c.AssertUpdate(p1, RoundUpdateT)
+	c.AssertUpdate(p2, RoundUpdateT)
+	c.AssertUpdate(p1, BetUpdateT)
+	c.AssertUpdate(p2, BetUpdateT)
+	c.SendAction(p1, model.RoundAction{ActionType: model.AllIn})
+	c.AssertUpdate(p2, RoundUpdateT)
+	update := c.AssertUpdate(p1, RoundUpdateT)
 	if update.CurrentBetter != p1.playerModel.Name {
 		t.Errorf("expected p1, got %s", update.CurrentBetter)
 	}
-	checkForUpdate(t, p1, PotUpdateT)
-	checkForUpdate(t, p2, PotUpdateT)
-	checkForUpdate(t, p1, DealUpdateT)
-	checkForUpdate(t, p2, DealUpdateT)
-	checkForUpdate(t, p1, PotUpdateT)
-	checkForUpdate(t, p2, PotUpdateT)
-	checkForUpdate(t, p1, DealUpdateT)
-	checkForUpdate(t, p2, DealUpdateT)
-	checkForUpdate(t, p1, PotUpdateT)
-	checkForUpdate(t, p2, PotUpdateT)
-	checkForUpdate(t, p1, DealUpdateT)
-	checkForUpdate(t, p2, DealUpdateT)
-	checkForUpdate(t, p1, PotUpdateT)
-	checkForUpdate(t, p2, PotUpdateT)
-	checkForUpdate(t, p1, HandOverUpdateT)
-	checkForUpdate(t, p2, HandOverUpdateT)
+	c.AssertUpdate(p1, PotUpdateT)
+	c.AssertUpdate(p2, PotUpdateT)
+	c.AssertUpdate(p1, DealUpdateT)
+	c.AssertUpdate(p2, DealUpdateT)
+	c.AssertUpdate(p1, PotUpdateT)
+	c.AssertUpdate(p2, PotUpdateT)
+	c.AssertUpdate(p1, DealUpdateT)
+	c.AssertUpdate(p2, DealUpdateT)
+	c.AssertUpdate(p1, PotUpdateT)
+	c.AssertUpdate(p2, PotUpdateT)
+	c.AssertUpdate(p1, DealUpdateT)
+	c.AssertUpdate(p2, DealUpdateT)
+	c.AssertUpdate(p1, PotUpdateT)
+	c.AssertUpdate(p2, PotUpdateT)
+	c.AssertUpdate(p1, HandOverUpdateT)
+	c.AssertUpdate(p2, HandOverUpdateT)
 }
 
 func TestTimeoutMidBet(t *testing.T) {
-	tableName := "test table"
-	ts, p1, p2 := createTableWithTwoPlayers(tableName)
-	ts.SendTableAction(StartTableAction(tableName, p1))
-	p1.GetTableResponse()
-	checkForUpdate(t, p1, TableUpdateT)
-	checkForUpdate(t, p2, TableUpdateT)
-	checkForUpdate(t, p1, NewHandUpdateT)
-	checkForUpdate(t, p2, NewHandUpdateT)
-	table := ts.tables[tableName]
+	c := NewTestClient(t)
+	p1, p2 := c.createTableWithTwoPlayers("test")
+	c.StartTable(p1, false)
+
+	c.AssertUpdate(p1, NewHandUpdateT)
+	c.AssertUpdate(p2, NewHandUpdateT)
+	table := c.ts.tables["test"]
 	if !table.playing {
 		t.Error("table should be playing")
 	}
-	checkForUpdate(t, p2, BetUpdateT)
-	checkForUpdate(t, p1, BetUpdateT)
-	sendRoundActionWithTimeout(t, p2, model.RoundAction{ActionType: model.Call})
-	checkRoundResponse(t, p2, false)
-	checkForUpdate(t, p1, RoundUpdateT)
-	checkForUpdate(t, p2, RoundUpdateT)
-	checkForUpdate(t, p1, BetUpdateT)
-	checkForUpdate(t, p2, BetUpdateT)
-	ts.clock.sleep(time.Hour)
-	checkForUpdate(t, p2, RoundUpdateT)
-	u := checkForUpdate(t, p1, RoundUpdateT)
+
+	c.AssertUpdate(p2, BetUpdateT)
+	c.AssertUpdate(p1, BetUpdateT)
+	c.SendAction(p2, model.RoundAction{ActionType: model.Call})
+	c.AssertUpdate(p1, RoundUpdateT)
+	c.AssertUpdate(p2, RoundUpdateT)
+	c.AssertUpdate(p1, BetUpdateT)
+	c.AssertUpdate(p2, BetUpdateT)
+
+	c.mockClock.sleep(time.Hour)
+	c.AssertUpdate(p2, RoundUpdateT)
+	u := c.AssertUpdate(p1, RoundUpdateT)
 	if u.RoundAction.ActionType != model.Fold {
 		t.Errorf("expected timeout fold, got: %s", u)
 	}
-	checkRoundResponse(t, p1, false)
-	checkForUpdate(t, p1, PotUpdateT)
-	checkForUpdate(t, p2, PotUpdateT)
-	checkForUpdate(t, p1, HandOverUpdateT)
-	checkForUpdate(t, p2, HandOverUpdateT)
-	checkForUpdate(t, p1, NewHandUpdateT)
-	checkForUpdate(t, p2, NewHandUpdateT)
+	c.AssertRoundActionResponse(p1, false)
+	c.AssertUpdate(p1, PotUpdateT)
+	c.AssertUpdate(p2, PotUpdateT)
+	c.AssertUpdate(p1, HandOverUpdateT)
+	c.AssertUpdate(p2, HandOverUpdateT)
+	c.AssertUpdate(p1, NewHandUpdateT)
+	c.AssertUpdate(p2, NewHandUpdateT)
 }
 
 func TestPauseMidBet(t *testing.T) {
-	tableName := "test table"
-	ts, p1, p2 := createTableWithTwoPlayers(tableName)
-	ts.SendTableAction(StartTableAction(tableName, p1))
-	p1.GetTableResponse()
-	checkForUpdate(t, p1, TableUpdateT)
-	checkForUpdate(t, p2, TableUpdateT)
-	checkForUpdate(t, p1, NewHandUpdateT)
-	checkForUpdate(t, p2, NewHandUpdateT)
-	table := ts.tables[tableName]
+	c := NewTestClient(t)
+	p1, p2 := c.createTableWithTwoPlayers("test")
+	c.StartTable(p1, false)
+
+	c.AssertUpdate(p1, NewHandUpdateT)
+	c.AssertUpdate(p2, NewHandUpdateT)
+	table := c.ts.tables["test"]
 	if !table.playing {
 		t.Error("table should be playing")
 	}
-	checkForUpdate(t, p2, BetUpdateT)
-	checkForUpdate(t, p1, BetUpdateT)
-	sendRoundActionWithTimeout(t, p2, model.RoundAction{ActionType: model.Call})
-	if r := p2.GetRoundResponse(); r.Err != "" {
-		t.Errorf("expected a successful bet, got error: %s", r.Err)
-	}
-	checkForUpdate(t, p1, RoundUpdateT)
-	checkForUpdate(t, p2, RoundUpdateT)
-	checkForUpdate(t, p1, BetUpdateT)
-	checkForUpdate(t, p2, BetUpdateT)
-	ts.SendTableAction(PauseTableAction(tableName, p1))
-	checkForUpdate(t, p1, TableUpdateT)
-	checkForUpdate(t, p2, TableUpdateT)
-	if p1.GetTableResponse().Err != "" {
-		t.Error("expected to pause table successfully")
-	}
-	ts.clock.sleep(time.Hour)
-	ts.SendTableAction(UnpauseTableAction(tableName, p1))
-	checkForUpdate(t, p1, TableUpdateT)
-	checkForUpdate(t, p2, TableUpdateT)
-	if p1.GetTableResponse().Err != "" {
-		t.Error("expected to pause table successfully")
-	}
-	checkForUpdate(t, p1, BetUpdateT)
-	checkForUpdate(t, p2, BetUpdateT)
-	sendRoundActionWithTimeout(t, p1, model.RoundAction{ActionType: model.Call})
-	if r := p1.GetRoundResponse(); r.Err != "" {
-		t.Errorf("expected a successful bet, got error: %s", r.Err)
-	}
-	checkForUpdate(t, p2, RoundUpdateT)
-	update := checkForUpdate(t, p1, RoundUpdateT)
+
+	c.AssertUpdate(p2, BetUpdateT)
+	c.AssertUpdate(p1, BetUpdateT)
+	c.SendAction(p2, model.RoundAction{ActionType: model.Call})
+	c.AssertUpdate(p1, RoundUpdateT)
+	c.AssertUpdate(p2, RoundUpdateT)
+	c.AssertUpdate(p1, BetUpdateT)
+	c.AssertUpdate(p2, BetUpdateT)
+
+	c.Pause(p1)
+	c.AssertUpdate(p1, TableUpdateT)
+	c.AssertUpdate(p2, TableUpdateT)
+
+	c.mockClock.sleep(time.Hour)
+	c.Unpause(p1)
+	c.AssertUpdate(p1, TableUpdateT)
+	c.AssertUpdate(p2, TableUpdateT)
+
+	c.AssertUpdate(p1, BetUpdateT)
+	c.AssertUpdate(p2, BetUpdateT)
+	c.SendAction(p1, model.RoundAction{ActionType: model.Call})
+	c.AssertUpdate(p2, RoundUpdateT)
+	update := c.AssertUpdate(p1, RoundUpdateT)
 	if update.CurrentBetter != p1.playerModel.Name {
 		t.Errorf("expected p1, got %s", update.CurrentBetter)
 	}
-	checkForUpdate(t, p1, PotUpdateT)
-	checkForUpdate(t, p1, DealUpdateT)
+	c.AssertUpdate(p1, PotUpdateT)
+	c.AssertUpdate(p1, DealUpdateT)
 }
 
 func TestSetChipCount(t *testing.T) {
-	tableName := "test table"
+	c := NewTestClient(t)
+	p1, p2 := c.createTableWithTwoPlayers("test")
 	newAmount := 1234
-	ts, p1, p2 := createTableWithTwoPlayers(tableName)
 
-	ts.SendTableAction(SetChipCountTableAction(tableName, p1, p2.GetName(), newAmount))
-	if r := p1.GetTableResponse(); r.Err == "" {
-		t.Error("expected an error when setting chip count before table is started")
-	}
+	// Fail to set chip count before table is started.
+	c.SetChipCount(p1, p2.GetName(), newAmount, true)
 
-	ts.SendTableAction(StartTableAction(tableName, p1))
-	p1.GetTableResponse()
-	checkForUpdate(t, p1, TableUpdateT)
-	checkForUpdate(t, p2, TableUpdateT)
-	checkForUpdate(t, p1, NewHandUpdateT)
-	checkForUpdate(t, p2, NewHandUpdateT)
-	table := ts.tables[tableName]
+	c.StartTable(p1, false)
+	c.AssertUpdate(p1, NewHandUpdateT)
+	c.AssertUpdate(p2, NewHandUpdateT)
+	table := c.ts.tables["test"]
 	if !table.playing {
 		t.Error("table should be playing")
 	}
-	checkForUpdate(t, p2, BetUpdateT)
-	checkForUpdate(t, p1, BetUpdateT)
+	c.AssertUpdate(p2, BetUpdateT)
+	c.AssertUpdate(p1, BetUpdateT)
 
-	ts.SendTableAction(SetChipCountTableAction(tableName, p1, p2.GetName(), newAmount))
-	if r := p1.GetTableResponse(); r.Err == "" {
-		t.Error("expected an error when setting chip count when unpaused")
-	}
-	ts.SendTableAction(PauseTableAction(tableName, p1))
+	// Fail to set chip count while hand is in progress.
+	c.SetChipCount(p1, p2.GetName(), newAmount, true)
+
+	// Have players stand up to stop the hand.
+	c.Stand(p1)
+	c.Stand(p2)
+	// Drain the updates from the stand actions.
+	c.DrainUpdates(p1)
+	c.DrainUpdates(p2)
+
+	c.Pause(p1)
 	checkForUpdate(t, p1, TableUpdateT)
 	checkForUpdate(t, p2, TableUpdateT)
-	if p1.GetTableResponse().Err != "" {
-		t.Error("expected to pause table successfully")
-	}
+	c.AssertTablePaused("test", true)
+
 	// Fail to set chip count as non-admin.
-	ts.SendTableAction(SetChipCountTableAction(tableName, p2, p1.GetName(), newAmount))
-	if r := p2.GetTableResponse(); r.Err == "" {
-		t.Error("expected an error when non-admin sets chip count")
-	}
-
+	c.SetChipCount(p2, p1.GetName(), newAmount, true)
 	// Fail to set chip count for a user not at the table.
-	ts.SendTableAction(SetChipCountTableAction(tableName, p1, "fakePlayer", newAmount))
-	if r := p1.GetTableResponse(); r.Err == "" {
-		t.Error("expected an error when setting chip count of fake player")
-	}
-
+	c.SetChipCount(p1, "fakePlayer", newAmount, true)
 	// Fail to set chip count to a negative value.
-	ts.SendTableAction(SetChipCountTableAction(tableName, p1, p2.GetName(), -1))
-	if r := p1.GetTableResponse(); r.Err == "" {
-		t.Error("expected an error when setting chip count to a negative value")
-	}
+	c.SetChipCount(p1, p2.GetName(), -1, true)
 
 	// Successfully set the chip count.
-	ts.SendTableAction(SetChipCountTableAction(tableName, p1, p2.GetName(), newAmount))
-	if r := p1.GetTableResponse(); r.Err != "" {
-		t.Errorf("expected to successfully set chip count, got %s", r.Err)
-	}
-	update := checkForUpdate(t, p1, TableUpdateT)
+	c.SetChipCount(p1, p2.GetName(), newAmount, false)
+	update := c.AssertUpdate(p1, TableUpdateT)
 	if update.TableAction.TableActionType != SetChipCount {
 		t.Errorf("expected a SetChipCount update, got %v", update.TableAction.TableActionType)
 	}
@@ -504,7 +390,7 @@ func TestSetChipCount(t *testing.T) {
 	if update.TableAction.PlayerName != p2.GetName() {
 		t.Errorf("expected player name to be %s, got %s", p2.GetName(), update.TableAction.PlayerName)
 	}
-	update = checkForUpdate(t, p2, TableUpdateT)
+	update = c.AssertUpdate(p2, TableUpdateT)
 	if update.TableAction.TableActionType != SetChipCount {
 		t.Errorf("expected a SetChipCount update, got %v", update.TableAction.TableActionType)
 	}

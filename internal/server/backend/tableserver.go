@@ -168,8 +168,8 @@ type (
 		table       *model.Table
 		clock       clock
 		playing     bool
-		pauseChan   chan struct{}
-		unpauseChan chan struct{}
+		pauseChan   chan TableAction
+		unpauseChan chan TableAction
 		paused      bool
 		players     map[string]*Player
 	}
@@ -281,8 +281,8 @@ func (ts *TableServer) newTable(name string, config TableConfig, creator string)
 	ts.tables[name] = &Table{
 		name: name, table: model.NewTableWithConfig(config.ModelConfig),
 		adminName: creator, tableConfig: config,
-		pauseChan:   make(chan struct{}),
-		unpauseChan: make(chan struct{}),
+		pauseChan:   make(chan TableAction),
+		unpauseChan: make(chan TableAction),
 		players:     make(map[string]*Player),
 		clock:       ts.clock,
 	}
@@ -446,11 +446,9 @@ func (ts *TableServer) Serve() {
 			err = ts.start(a)
 		case Pause:
 			// TODO who should be allowed to pause?
-			a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
-			ts.tables[a.TableName].pauseChan <- struct{}{}
+			ts.tables[a.TableName].pauseChan <- a
 		case Unpause:
-			a.player.GetTable().sendPlayerUpdates(newTableUpdate(a))
-			ts.tables[a.TableName].unpauseChan <- struct{}{}
+			ts.tables[a.TableName].unpauseChan <- a
 		case SetChipCount:
 			ts.mutex.Lock()
 			table, ok := ts.tables[a.TableName]
@@ -515,6 +513,13 @@ func (p *Player) StandUp() {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	p.playerModel.StandUp()
+}
+
+// WantsToStandUp returns whether the player wants to stand up.
+func (p *Player) WantsToStandUp() bool {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	return p.playerModel.WantToStandUp
 }
 
 // StandNow from the table
@@ -814,20 +819,28 @@ func (ts *TableServer) serveTable(t *Table) error {
 
 func (t *Table) handlePause() {
 	select {
-	case <-t.pauseChan:
-		t.updatePaused(true)
-		<-t.unpauseChan
-		log.Println("unpaused")
-		t.updatePaused(false)
+	case a := <-t.pauseChan:
+		t.updatePaused(true, a)
+		a = <-t.unpauseChan
+		t.updatePaused(false, a)
 	default:
 	}
 
 }
 
-func (t *Table) updatePaused(p bool) {
+func (t *Table) updatePaused(p bool, a TableAction) {
+	ta := UnpauseTableAction(t.Name(), a.player)
+	if p {
+		ta = PauseTableAction(t.Name(), a.player)
+	}
 	t.mutex.Lock()
-	defer t.mutex.Unlock()
 	t.paused = p
+	t.mutex.Unlock()
+	t.sendPlayerUpdates(
+		&PlayerUpdate{
+			Type:        TableUpdateT,
+			TableAction: ta,
+		})
 }
 
 func (t *Table) currentBets() []int {
@@ -1010,9 +1023,11 @@ func (p *Player) sendPlayerUpdate(u *PlayerUpdate, wg *sync.WaitGroup) {
 	}
 	wg.Add(1)
 	clock := p.table.clock
+	log.Println(fmt.Printf("sending table update, %v", u.Type))
 	go func(p *Player) {
 		select {
 		case p.TableUpdateChan <- u:
+			log.Println(fmt.Printf("sent table update, %v", u.Type))
 		case <-clock.after(500 * time.Millisecond):
 			log.Printf("time out sending to %s's tableUpdateChan", p.playerModel.Name)
 		}
@@ -1031,11 +1046,11 @@ func getPlayerAction(timeRemaining, elapsedTime time.Duration, player *Player, t
 		t.sendPlayerUpdates(newBetUpdate(player, timeRemaining, elapsedTime))
 		wg.Wait()
 		select {
-		case <-t.pauseChan:
+		case a := <-t.pauseChan:
 			elapsedTime += t.clock.now().Sub(n)
-			t.updatePaused(true)
-			<-t.unpauseChan
-			t.updatePaused(false)
+			t.updatePaused(true, a)
+			a = <-t.unpauseChan
+			t.updatePaused(false, a)
 			n = t.clock.now()
 		case action = <-player.requestChan:
 			action = t.sanitizeAction(action, player)
