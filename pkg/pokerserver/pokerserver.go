@@ -3,7 +3,7 @@ package pokerserver
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 
@@ -75,7 +75,7 @@ func configureLogging(config Configuration) {
 		log.SetOutput(file)
 	}
 	if config.Quiet {
-		log.SetOutput(ioutil.Discard)
+		log.SetOutput(io.Discard)
 	}
 }
 
