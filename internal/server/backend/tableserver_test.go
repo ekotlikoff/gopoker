@@ -423,17 +423,3 @@ func sendRoundActionWithTimeout(t *testing.T, p *Player, ra model.RoundAction) {
 		return
 	}
 }
-
-func checkRoundResponse(t *testing.T, p *Player, expectErr bool) *RoundActionResponse {
-	t.Helper()
-	select {
-	case r := <-p.responseChan:
-		if (expectErr && r.Err == "") || (!expectErr && r.Err != "") {
-			t.Errorf("want err: %v, got %v", expectErr, r.Err)
-		}
-		return &r
-	case <-time.After(time.Second):
-		t.Fatal("Timeout in checkRoundResponse")
-		return nil
-	}
-}
